@@ -78,7 +78,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     console.log(`PATIENT CREATED SUCCESSFULLY → ${firstName} ${lastName}`);
   });
 
-  test.only('2. Check duplicate patient validation', async ({ page }) => {
+  test('2. Check duplicate patient validation', async ({ page }) => {
 
     await page.goto('/dashboard');
   
