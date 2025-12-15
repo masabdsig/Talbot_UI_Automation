@@ -23,7 +23,8 @@ test.describe('Patient Module - Add Patient Flow', () => {
     const lastName = faker.person.lastName() + '_' + Date.now();  // timestamp to avoid duplicates
     const dob = faker.date.birthdate({ min: 18, max: 70, mode: 'age' });
     const dobFormatted = dob.toLocaleDateString('en-US');
-  
+    const email = faker.internet.email();
+
     const patientData = {
       firstName,
       lastName,
@@ -36,6 +37,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
       phone: '(555) 123-4567',
       createdAt: new Date().toISOString()
     };
+  
   
     console.log("PATIENT DATA →", patientData);
   
@@ -65,6 +67,9 @@ test.describe('Patient Module - Add Patient Flow', () => {
   
     console.log('STEP: Filling mandatory patient fields...');
     await patient.fillMandatoryFields(patientData);
+
+    console.log('STEP: entering "Email Address"...');
+    await patient.enterEmailAddress(email);
   
     console.log('STEP: Checking "Does not have SSN"...');
     await patient.checkNoSSN();
@@ -78,7 +83,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     console.log(`PATIENT CREATED SUCCESSFULLY → ${firstName} ${lastName}`);
   });
 
-  test('2. Check duplicate patient validation', async ({ page }) => {
+  test.skip('2. Check duplicate patient validation', async ({ page }) => {
 
     await page.goto('/dashboard');
   

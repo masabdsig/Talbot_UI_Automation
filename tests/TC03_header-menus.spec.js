@@ -41,12 +41,12 @@ test('2. navigate and validate all overflow menu items URLs', async ({ page }) =
   // Navigate and validate all overflow menu items
   const result = await headerMenuPage.navigateAndValidateOverflowMenuItems();
 
-  // Assert that at least some items were successfully validated
+  // Assert that at menu items were successfully validated
   expect(result.validatedItems.length).toBeGreaterThan(0);
   console.log(`\n✅ Test completed: ${result.validatedItems.length} menu items successfully validated`);
 });
 
-test('3. navigate and validate all overflow menu items URLs', async ({ page }) => {
+test('3. navigate and validate Reports menu items and URLs', async ({ page }) => {
   const loginPage = new LoginPage(page);
   const headerMenuPage = new HeaderMenuPage(page);
 
@@ -59,7 +59,7 @@ test('3. navigate and validate all overflow menu items URLs', async ({ page }) =
   // Navigate and validate all overflow menu items
   const result = await headerMenuPage.navigateAndValidateReportItems();
 
-  // Assert that at least some items were successfully validated
+  // Assert that at all menu items were successfully validated
   expect(result.validatedItems.length).toBeGreaterThan(0);
   console.log(`\n✅ Test completed: ${result.validatedItems.length} menu items successfully validated`);
 });

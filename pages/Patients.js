@@ -22,6 +22,7 @@ class PatientPage {
     this.zipcode = page.locator('label:has-text("Zip Code") + input');
     this.city = page.locator('label:has-text("City") + input');
     this.phoneNumber = page.locator('label:has-text("Phone Number") + input');
+    this.emailAddress = page.locator('label:has-text("Email") + input');
 
     // Dropdowns (stable, label-based)
     this.genderDropdown = page
@@ -120,6 +121,7 @@ class PatientPage {
     console.log(`ACTION: Filling DOB: ${data.dob}`);
     await this.dobInput.fill(data.dob);
 
+    await this.page.waitForTimeout(1000);
     // GENDER SELECTION
     console.log(`ACTION: Selecting gender: ${data.gender}`);
     await this.genderDropdown.click({ force: true });
@@ -278,6 +280,11 @@ class PatientPage {
   
     // Confirm it is fully visible and clickable
     await expect(this.religionDropdown).toBeVisible();
+  }
+
+  async enterEmailAddress(email) {
+    console.log(`ACTION: Entering email address: ${email}`);
+    await this.emailAddress.fill(email);
   }
 
 }
