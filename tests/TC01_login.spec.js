@@ -10,7 +10,7 @@ const validPassword = process.env.LOGIN_PASSWORD;
 
 test.describe('Login scenarios', () => {
 
-    test('1. User cannot login with invalid username and password', async ({ page }) => {
+    test('TC01 - User cannot login with invalid username and password', async ({ page }) => {
         const login = new LoginPage(page);
         await login.goto();
         await login.login(username, password);
@@ -18,7 +18,7 @@ test.describe('Login scenarios', () => {
         expect(page.url()).toContain('/login');
     });
 
-    test('2. Login fails with valid username and wrong password', async ({ page }) => {
+    test('TC02 - Login fails with valid username and wrong password', async ({ page }) => {
         const login = new LoginPage(page);
         await login.goto();
         await login.login(validUsername, password);
@@ -26,7 +26,7 @@ test.describe('Login scenarios', () => {
         expect(page.url()).toContain('/login');
     });
 
-    test('3. Login succeeds with valid credentials and user session is saved', async ({ page }) => {
+    test('TC03 - Login succeeds with valid credentials and user session is saved', async ({ page }) => {
         const login = new LoginPage(page);
         await login.goto();
         await login.login(validUsername, validPassword);
@@ -34,7 +34,7 @@ test.describe('Login scenarios', () => {
         expect(page.url()).toContain('/dashboard');
     });
 
-    test('4. Check Forgot Password Flow', async ({ page }) => {
+    test('TC04-Check Forgot Password Flow', async ({ page }) => {
         const login = new LoginPage(page);
 
         // 1️⃣ Navigate to Login page

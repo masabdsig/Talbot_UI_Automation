@@ -271,13 +271,21 @@ class HeaderMenuPage {
         await menuLocator.click();
         console.log(`✔️ Clicked: ${item.name}`);
 
+        // Wait for navigation to start before checking URL
+        await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+
         // Validate URL contains expected string
         try {
-          await this.page.waitForURL(`**/*${item.urlContains}*`, { timeout: 8000 });
+          await this.page.waitForURL(`**/*${item.urlContains}*`, { timeout: 10000 });
+          // Additional wait for SPA to fully settle
+          await this.page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
           console.log(`✔️ URL validated for: ${item.name}`);
           validatedItems.push(item.name);
         } catch (urlErr) {
+          const currentUrl = this.page.url();
           console.log(`❌ URL did NOT match expected for: ${item.name}`);
+          console.log(`   Expected URL to contain: "${item.urlContains}"`);
+          console.log(`   Actual URL: ${currentUrl}`);
           failedItems.push(item.name);
         }
 
@@ -382,29 +390,45 @@ class HeaderMenuPage {
       await expect(reportsMenu).toBeVisible();
       await reportsMenu.hover();
       console.log("✔️ Hovered on 'Reports' to open submenu");
-  
+      
+      // Wait for submenu to appear and stabilize (critical for hover-based menus)
+      await this.page.waitForTimeout(500);
+
       // Now find the report item inside submenu
       const reportLocator = this.page.getByText(report.name, { exact: false }).first();
-  
+
       try {
-        await expect(reportLocator).toBeVisible({ timeout: 2000 });
+        await expect(reportLocator).toBeVisible({ timeout: 3000 });
         console.log(`✔️ Found in submenu: ${report.name}`);
-  
+
         await reportLocator.click();
         console.log(`✔️ Clicked: ${report.name}`);
-  
+
+        // Wait for navigation to start before checking URL
+        await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+
         // Validate URL contains expected fragment
         try {
-          await this.page.waitForURL(`**/*${report.urlContains}*`, { timeout: 8000 });
+          await this.page.waitForURL(`**/*${report.urlContains}*`, { timeout: 10000 });
+          // Additional wait for SPA to fully settle
+          await this.page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
           console.log(`✔️ URL validated for: ${report.name}`);
           validatedItems.push(report.name);
-        } catch {
+        } catch (urlErr) {
+          const currentUrl = this.page.url();
           console.log(`❌ URL mismatch for: ${report.name}`);
+          console.log(`   Expected URL to contain: "${report.urlContains}"`);
+          console.log(`   Actual URL: ${currentUrl}`);
           failedItems.push(report.name);
         }
-  
-      } catch {
-        console.log(`❌ NOT FOUND in Reports submenu: "${report.name}"`);
+
+      } catch (e) {
+        // More specific error handling to distinguish between visibility and click failures
+        if (e.message && (e.message.includes('timeout') || e.message.includes('not visible'))) {
+          console.log(`❌ NOT FOUND in Reports submenu: "${report.name}"`);
+        } else {
+          console.log(`❌ Error interacting with "${report.name}": ${e.message || 'Unknown error'}`);
+        }
         failedItems.push(report.name);
       }
   
