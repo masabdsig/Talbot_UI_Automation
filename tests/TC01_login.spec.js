@@ -10,7 +10,7 @@ const validPassword = process.env.LOGIN_PASSWORD;
 
 test.describe('Login scenarios', () => {
 
-    test('User cannot login with invalid username and password', async ({ page }) => {
+    test('1. User cannot login with invalid username and password', async ({ page }) => {
         const login = new LoginPage(page);
         await login.goto();
         await login.login(username, password);
@@ -18,7 +18,7 @@ test.describe('Login scenarios', () => {
         expect(page.url()).toContain('/login');
     });
 
-    test('Login fails with valid username and wrong password', async ({ page }) => {
+    test('2. Login fails with valid username and wrong password', async ({ page }) => {
         const login = new LoginPage(page);
         await login.goto();
         await login.login(validUsername, password);
@@ -26,7 +26,7 @@ test.describe('Login scenarios', () => {
         expect(page.url()).toContain('/login');
     });
 
-    test('Login succeeds with valid credentials and user session is saved', async ({ page }) => {
+    test('3. Login succeeds with valid credentials and user session is saved', async ({ page }) => {
         const login = new LoginPage(page);
         await login.goto();
         await login.login(validUsername, validPassword);
@@ -34,27 +34,27 @@ test.describe('Login scenarios', () => {
         expect(page.url()).toContain('/dashboard');
     });
 
-    test('Check Forgot Password Flow', async ({ page }) => {
+    test('4. Check Forgot Password Flow', async ({ page }) => {
         const login = new LoginPage(page);
-      
+
         // 1️⃣ Navigate to Login page
         await login.goto();
-      
+
         // 2️⃣ Click "Forgot password?"
         await login.openForgotPassword();
-      
+
         // 3️⃣ Validate Forgot Password page content
         await expect(login.fpHeader).toBeVisible();
         await expect(login.fpInstruction).toBeVisible();
-      
+
         // 4️⃣ Enter email using faker
         const randomEmail = faker.internet.email();
         await login.fillForgotPasswordEmail(randomEmail);
         console.log(`✔️ Entered email: ${randomEmail}`);
-      
+
         // 5️⃣ Submit forgot password request
         await login.submitForgotPassword();
-      
+
         // 6️⃣ Validate Verification Code page UI
         await expect(login.verifyInstruction).toBeVisible();
         await expect(login.codeField).toBeVisible();
@@ -62,14 +62,13 @@ test.describe('Login scenarios', () => {
         await expect(login.confirmPasswordField).toBeVisible();
         await expect(login.submitNewPasswordButton).toBeVisible();
         console.log('✔️ Verification Code page loaded');
-      
+
         // 7️⃣ Click "Back to Sign In"
         await login.backToSignIn();
-      
+
         // 8️⃣ Validate user returned to login page
         await expect(page).toHaveURL(/\/login/);
         console.log('✔️ Returned to Login page successfully');
-      });      
-    
-});
+    });
 
+});

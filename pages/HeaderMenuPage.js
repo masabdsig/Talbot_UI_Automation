@@ -325,7 +325,6 @@ class HeaderMenuPage {
       { name: 'Hold Billing Encounters', urlContains: 'hold-billing-encounters' },
       { name: 'Patient Balance Report', urlContains: 'patient-balance-report' },
       { name: 'Methasoft Report', urlContains: 'methasoft-report' },
-      { name: 'Medical Inactive patient', urlContains: 'inactive-patients' },
       { name: 'Daily Close Report', urlContains: 'daily-close-payment' },
       { name: 'Appointments Report', urlContains: 'view-appointment-report' },
       { name: 'DE to be Scheduled', urlContains: 'de-report' },
@@ -343,11 +342,12 @@ class HeaderMenuPage {
       { name: 'Group Encounters', urlContains: 'group-encounters' },
       { name: 'Staff Productivity', urlContains: 'staff-productivity' },
       { name: 'No Careteam', urlContains: 'no-careteam' },
-      { name: 'Intervention/Discharge', urlContains: 'intervention/discharge' },
+      { name: 'Intervention/Discharge', urlContains: 'intervention-discharge' },
       { name: 'Residential Billing Summary', urlContains: 'residential-billing-summary' },
-      { name: 'Locked Patients', urlContains: 'locked-patients' },
-      { name: 'Residential Admission', urlContains: 'residential-admission' },
-      { name: 'Budget Report', urlContains: 'budget-report' }
+      { name: 'Locked Patients', urlContains: 'patient-locked' },
+      { name: 'Residential Admission', urlContains: 'residential-admission-summary' },
+      { name: 'Budget Report', urlContains: 'budget-report' },
+      { name: 'Medical Inactive patient', urlContains: 'inactive-patients' }
     ];
   
     const validatedItems = [];

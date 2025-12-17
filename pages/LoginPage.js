@@ -48,7 +48,7 @@ class LoginPage {
 
   // --- MFA SKIP ---
   async skipMfa() {
-    await this.page.waitForTimeout(3000);
+    await this.page.waitForTimeout(2000);
     await this.mfaSkipButton.click();
     await this.page.waitForTimeout(2000);
   }
@@ -85,6 +85,23 @@ class LoginPage {
   async backToSignIn() {
     await this.backToSignInLink.click();
     await this.page.waitForURL('**/login');
+  }
+
+  // --- NAVIGATE TO DASHBOARD (using saved session) ---
+  async navigateToDashboard() {
+    console.log('Navigating to dashboard...');
+    await this.page.goto('/dashboard');
+    
+    // Handle MFA skip if it appears
+    try {
+      await this.skipMfa();
+    } catch (e) {
+      console.log('MFA skip not needed or failed');
+    }
+    
+    // Wait for dashboard to load
+    await this.page.waitForURL('**/dashboard', { timeout: 15000 });
+    await this.page.waitForTimeout(2000); // Allow page to stabilize
   }
 }
 

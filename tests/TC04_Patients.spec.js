@@ -127,7 +127,6 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.gotoPatientsTab();
     // Wait for Patients page to load
     await expect(patient.addPatientBtn).toBeVisible();
-    await page.waitForLoadState("networkidle");
 
     console.log('STEP: Opening Add Patient modal...');
     await patient.openAddPatientModal();
@@ -170,11 +169,10 @@ test.describe('Patient Module - Add Patient Flow', () => {
         throw new Error('TEST FAILED: Duplicate patient validation not detected. Modal closed without error indication.');
       }
     }
-
     console.log('DUPLICATE PATIENT VALIDATION CHECKED');
   });
 
-  test('4.Edit existing patient details update Religion', async ({ page }) => {
+  test('4. Edit existing patient details update Religion', async ({ page }) => {
 
     await page.goto('/dashboard');
     const loginPage = new LoginPage(page);
@@ -186,7 +184,6 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.gotoPatientsTab();
     // Wait for Patients page to load
     await expect(patient.searchPatientInput).toBeVisible();
-    await page.waitForLoadState("networkidle");
 
     // 1. LOAD PATIENT DATA FROM JSON
     const filePath = path.join(__dirname, '../data/createdPatient.json');
@@ -204,6 +201,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     // 2. SEARCH PATIENT
     console.log(`STEP: Searching patient '${searchName}'`);
     await patient.searchPatient(searchName);
+    await page.waitForLoadState("networkidle");
   
     // Wait for search results to appear
     const patientRowLocator = patient.getPatientNameByFirstName(searchName);
@@ -236,15 +234,14 @@ test.describe('Patient Module - Add Patient Flow', () => {
     console.log("STEP: Saving Patient Information...");
     await patient.savePatientInformation();
     
-    // Wait for toast messages to appear
-    await page.waitForTimeout(1000);
+    // // Wait for toast messages to appear
   
     console.log("ASSERT: Checking success toast...");
     await expect(page.getByText('Patient Other Information Updated Successfully')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Patient Information Updated')).toBeVisible({ timeout: 10000 });
   }); 
   
-  test('5.Add Insurance for Existing Patient', async ({ page }) => {
+  test('5. Add Insurance for Existing Patient', async ({ page }) => {
 
     await page.goto('/dashboard');
     const loginPage = new LoginPage(page);
@@ -282,7 +279,6 @@ test.describe('Patient Module - Add Patient Flow', () => {
   
     // Wait for patient details page to load
     await expect(patient.patientHeaderName).toBeVisible({ timeout: 10000 });
-    await page.waitForLoadState("networkidle");
   
     // 4. OPEN EDIT FORM
     console.log("STEP: Opening patient edit form");

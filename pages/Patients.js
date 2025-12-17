@@ -373,7 +373,18 @@ class PatientPage {
       try {
         await this.genderDropdown.click({ force: true });
         await this.page.waitForTimeout(500);
+        
+        // Check if dropdown is open, if not open then click again
         const popup = this.page.locator('div[id$="_popup"]:visible');
+        const popupVisible = await popup.isVisible().catch(() => false);
+        
+        if (!popupVisible) {
+          console.log('INFO: Gender dropdown not open after first click, clicking again...');
+          await this.page.waitForTimeout(500);
+          await this.genderDropdown.click({ force: true });
+          await this.page.waitForTimeout(500);
+        }
+        
         await popup.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
         await popup.getByRole('option', { name: testData.gender, exact: true }).click().catch(() => {});
         await this.page.waitForTimeout(300);
@@ -453,9 +464,20 @@ class PatientPage {
     // GENDER SELECTION
     console.log(`ACTION: Selecting gender: ${data.gender}`);
     await this.genderDropdown.click({ force: true });
+    await this.page.waitForTimeout(500);
 
+    // Check if dropdown is open, if not open then click again
     const visiblePopup = this.page.locator('div[id$="_popup"]:visible');
-    await visiblePopup.waitFor();
+    const popupVisible = await visiblePopup.isVisible().catch(() => false);
+
+    if (!popupVisible) {
+      console.log('INFO: Gender dropdown not open after first click, clicking again...');
+      await this.page.waitForTimeout(500);
+      await this.genderDropdown.click({ force: true });
+      await this.page.waitForTimeout(500);
+    }
+
+    await visiblePopup.waitFor({ state: 'visible', timeout: 5000 });
 
     await visiblePopup.getByRole('option', { name: data.gender, exact: true }).click();
 
@@ -620,7 +642,7 @@ class PatientPage {
     // Wait for modal to be ready
     await this.page.waitForLoadState("networkidle");
     await expect(this.addInsurancePolicyModal).toBeVisible();
-    await this.page.waitForTimeout(1000);
+    await this.page.waitForTimeout(2000);
 
     // 1. Select Company Type (radio button)
     if (data.companyType) {
@@ -634,6 +656,19 @@ class PatientPage {
       await expect(companyTypeRadio).toBeVisible({ timeout: 10000 });
       await companyTypeRadio.click({ force: true });
       await this.page.waitForTimeout(1000); // Wait for dependent fields to enable
+
+      // Ensure Company Type radio is selected, if not then select again
+      console.log('VALIDATION: Ensuring Company Type radio is selected...');
+      const radioInput = this.page.locator(`ejs-radiobutton:has(span.e-label:has-text("${data.companyType}")) input[type="radio"]`);
+      const isSelected = await radioInput.isChecked().catch(() => false);
+      
+      if (!isSelected) {
+        console.log('INFO: Company Type radio not selected, selecting again...');
+        await companyTypeRadio.click({ force: true });
+        await this.page.waitForTimeout(1000); // Wait for dependent fields to enable
+      } else {
+        console.log('VALIDATION: Company Type radio is already selected');
+      }
 
       // Validate and select Payor Id (required field)
       console.log('VALIDATION: Checking Payor Id is enabled (required field)...');
