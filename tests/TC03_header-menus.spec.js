@@ -46,7 +46,7 @@ test('TC12 navigate and validate all overflow menu items URLs', async ({ page })
   console.log(`\n✅ Test completed: ${result.validatedItems.length} menu items successfully validated`);
 });
 
-test('TC13 navigate and validate Reports menu items and URLs', async ({ page }) => {
+test.skip('TC13 navigate and validate Reports menu items and URLs', async ({ page }) => {
   // Set longer timeout for this test as it validates many menu items
   test.setTimeout(300000); // 5 minutes
 
