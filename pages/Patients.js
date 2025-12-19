@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { expect } = require('@playwright/test');
 
 class PatientPage {
   constructor(page) {
@@ -10,11 +10,18 @@ class PatientPage {
     // Buttons
     this.addPatientBtn = page.locator('button.btn-primary:has-text("Add Patient")');
     this.saveBtn = page.locator('button.btn-primary:has-text("Save")');
+    this.cancelBtn = page.locator('.modal:has(.modal-title:has-text("Add New Patient")) button:has-text("Cancel"), button.btn-secondary:has-text("Cancel"), button.btn-danger:has-text("Cancel")');
 
     // Modal Title
     this.modalTitle = page.locator('.modal-title:has-text("Add New Patient")');
+    
+    // Modal Close Button (cross mark icon) - located in the modal header
+    // Target the <i> element with classes fa fa-times fa-lg within the Add New Patient modal
+    this.modalCloseButton = page.locator('.modal:has(.modal-title:has-text("Add New Patient")) .modal-header i.fa.fa-times.fa-lg').first();
 
     // Form inputs
+    this.patientId = page.locator('label:has-text("Patient Id") + input, input[id*="patientId"], input[id*="patient_id"]');
+    this.billingId = page.locator('label:has-text("Billing Id") + input, input[id*="billingId"], input[id*="billing_id"]');
     this.firstName = page.locator('label:has-text("First Name") + input');
     this.lastName = page.locator('label:has-text("Last Name") + input');
     this.dobInput = page.locator('#patient_dob_datepicker_input');
@@ -46,6 +53,46 @@ class PatientPage {
 
     // Checkboxes
     this.noSSNCheckbox = page.locator('label:has-text("Doesn\'t have SSN") input[type="checkbox"]');
+    this.isTestPatientCheckbox = page.locator('label:has-text("Is Test Patient") input[type="checkbox"], input[id*="testPatient"], input[id*="isTestPatient"]');
+    this.addToCancellationListCheckbox = page.locator('label:has-text("Add to Cancellation List") input[type="checkbox"], label:has-text("Add to Cancellation List?") input[type="checkbox"], input[id*="cancellationList"]');
+    this.isWalkInEmergencyCareClientCheckbox = page.locator('label:has-text("Is Walk-In Emergency Care Client") input[type="checkbox"], label:has-text("Is Walk-In Emergency Care Client?") input[type="checkbox"], input[id*="walkIn"], input[id*="emergencyCare"]');
+    this.enableLoginCheckbox = page.locator('label:has-text("Enable Login") input[type="checkbox"], input[id*="enableLogin"]');
+
+    // Phone Assessment Question (appears when Add to Cancellation List is checked)
+    // The question is in a legend tag: "Do you want to be called for a phone assessment if there is a cancellation or no show?"
+    this.phoneAssessmentQuestion = page.locator('.modal:has(.modal-title:has-text("Add New Patient")) legend:has-text("Do you want to be called for"), .modal:has(.modal-title:has-text("Add New Patient")) fieldset legend:has-text("phone assessment")');
+    // Yes/No options for Phone Assessment - using the name attribute "enabledPhoneAssessment"
+    // Yes option has value="true", No option uses ejs-radiobutton with label="No"
+    this.phoneAssessmentYesInput = page.locator('.modal:has(.modal-title:has-text("Add New Patient")) input[type="radio"][name="enabledPhoneAssessment"][value="true"]');
+    this.phoneAssessmentNoInput = page.locator('.modal:has(.modal-title:has-text("Add New Patient")) ejs-radiobutton[label="No"] input[type="radio"]').first();
+    this.phoneAssessmentYesLabel = page.locator('.modal:has(.modal-title:has-text("Add New Patient")) ejs-radiobutton[label="Yes"] label, .modal:has(.modal-title:has-text("Add New Patient")) ejs-radiobutton:has(input[type="radio"][name="enabledPhoneAssessment"][value="true"]) label').first();
+    this.phoneAssessmentNoLabel = page.locator('.modal:has(.modal-title:has-text("Add New Patient")) ejs-radiobutton[label="No"] label').first();
+
+    // Client Availability (appears when Add to Cancellation List is checked)
+    // Weekday checkboxes (Monday to Saturday)
+    this.getWeekdayCheckbox = (day) => page.locator('.modal:has(.modal-title:has-text("Add New Patient")) label:has-text("' + day + '") input[type="checkbox"], .modal:has(.modal-title:has-text("Add New Patient")) input[type="checkbox"][id*="' + day.toLowerCase() + '"]').first();
+    // Time controls - from and to time pickers for each day
+    // Look for time inputs near the weekday label
+    this.getTimeControls = (day) => page.locator('.modal:has(.modal-title:has-text("Add New Patient")) label:has-text("' + day + '")').locator('xpath=following::input[contains(@id, "time") or contains(@id, "Time") or contains(@placeholder, "time") or contains(@placeholder, "Time") or contains(@class, "time")]');
+    this.anyTimeInput = page.locator('.modal:has(.modal-title:has-text("Add New Patient")) input[id*="time"], .modal:has(.modal-title:has-text("Add New Patient")) input[placeholder*="time"]').first();
+    this.timeOptions = page.locator('div[id$="_popup"]:visible li[role="option"]');
+    
+    // Dropdown popups (generic)
+    this.dropdownPopup = page.locator('div[id$="_popup"]:visible');
+    
+    // Patient Demographics page locators
+    this.patientHeader = page.locator('.card-header .card-title-text, h1:has-text("Patient"), .patient-header, .patient-demographics');
+    this.isTestPatientOnPage = page.locator('label:has-text("Is Test Patient"), div:has-text("Is Test Patient"), span:has-text("Is Test Patient"), input[type="checkbox"][id*="testPatient"]').first();
+    this.isWalkInOnPage = page.locator('label:has-text("Is Walk-In Emergency Care Client"), label:has-text("Is Walk-In Emergency Care Client?"), div:has-text("Walk-In Emergency Care"), span:has-text("Walk-In Emergency Care")').first();
+    this.enableLoginOnPage = page.locator('label:has-text("Enable Login"), div:has-text("Enable Login"), span:has-text("Enable Login"), input[type="checkbox"][id*="enableLogin"]').first();
+    this.testPatientCheckboxOnPage = page.locator('input[type="checkbox"][id*="testPatient"]').first();
+    this.walkInCheckboxOnPage = page.locator('input[type="checkbox"][id*="walkIn"], input[type="checkbox"][id*="emergencyCare"]').first();
+    this.enableLoginCheckboxOnPage = page.locator('input[type="checkbox"][id*="enableLogin"]').first();
+    
+    // Arrays
+    this.weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    this.daysToCheckTime = ['Monday', 'Tuesday', 'Wednesday'];
+    this.daysToCheck = ['Monday', 'Wednesday'];
 
     // Success toast
     this.successToast = page.locator('.toast-success');
@@ -192,7 +239,7 @@ class PatientPage {
     await this.page.waitForTimeout(500);
     
     // Wait for popup to appear
-    const popup = this.page.locator('div[id$="_popup"]:visible');
+    const popup = this.dropdownPopup;
     await popup.waitFor({ state: 'visible', timeout: 5000 });
     
     // Get all options
@@ -375,7 +422,7 @@ class PatientPage {
         await this.page.waitForTimeout(500);
         
         // Check if dropdown is open, if not open then click again
-        const popup = this.page.locator('div[id$="_popup"]:visible');
+        const popup = this.dropdownPopup;
         const popupVisible = await popup.isVisible().catch(() => false);
         
         if (!popupVisible) {
@@ -437,7 +484,7 @@ class PatientPage {
         if (!stateValue || stateValue.trim() === "") {
           await this.stateDropdown.click({ force: true });
           await this.page.waitForTimeout(500);
-          const popup = this.page.locator('div[id$="_popup"]:visible');
+          const popup = this.dropdownPopup;
           await popup.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
           await popup.getByRole('option', { name: testData.state, exact: true }).click().catch(() => {});
           await this.page.waitForTimeout(300);
@@ -523,7 +570,7 @@ class PatientPage {
 
       await this.stateDropdown.click({ force: true });
 
-      const popup = this.page.locator('div[id$="_popup"]:visible');
+      const popup = this.dropdownPopup;
       await popup.waitFor();
 
       await popup.getByRole('option', { name: data.state, exact: true }).click();
@@ -577,7 +624,7 @@ class PatientPage {
     await this.religionDropdown.click({ force: true });
 
     // 3. Check if dropdown is open, if not open then wait for 2 sec and click again
-    const popup = this.page.locator('div[id$="_popup"]:visible');
+    const popup = this.dropdownPopup;
     const popupVisible = await popup.isVisible().catch(() => false);
 
     if (!popupVisible) {
