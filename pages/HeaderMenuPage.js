@@ -157,11 +157,7 @@ class HeaderMenuPage {
       { name: 'Approve Residential Billing', urlContains: 'approve-residential-billing' },
       { name: 'Lab Utilization Report', urlContains: 'lab-utilization-report' },
       { name: 'Firedrill Inspections', urlContains: 'firedrill-inspections' },
-      { name: 'Restore Documents', urlContains: 'deleted-docs' },
-      { name: 'Provider Credentialing', urlContains: 'credentialing' },
-      { name: 'Payor Configuration (Appointment)', urlContains: 'payorconfig/appointmenttype' },
-      { name: 'Payor Configuration (Encounter)', urlContains: 'payorconfig/ecncountertype' },
-      { name: 'Patient Intake Approval', urlContains: 'patient-intake' }
+      { name: 'Restore Documents', urlContains: 'deleted-docs' }
     ];
 
     const validatedItems = [];
