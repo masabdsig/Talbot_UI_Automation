@@ -11,24 +11,10 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
   test('TC20. Validate Patient Tab controls visibility and functionality above Patient Listing grid', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
     const patient = new PatientPage(page);
 
     // Navigate to Patients tab
-    console.log("ACTION: Navigating to Patients tab...");
-    await patient.gotoPatientsTab();
-    
-    // Wait for Patients page to load - wait for key elements to be visible
-    console.log("ACTION: Waiting for Patients page to fully load...");
-    await expect(patient.searchPatientInput).toBeVisible({ timeout: 15000 });
-    await expect(patient.admissionStatusDropdown).toBeVisible({ timeout: 15000 });
-    await expect(patient.clientsToggleBar).toBeVisible({ timeout: 10000 });
-    await expect(patient.addPatientBtn).toBeVisible({ timeout: 10000 });
-    
-    // Additional wait for page to fully render and stabilize
-    await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
-    await page.waitForTimeout(2000);
-    console.log("ASSERT: Patients page has loaded and elements are ready");
+    await patient.navigateToPatientsTab(loginPage);
 
     // Step 1: Validate Patient Tab controls visibility
     await patient.validatePatientTabControlsVisibility();
@@ -45,12 +31,11 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
   test('TC21. Validate Add New Patient popup display and close functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
     const patient = new PatientPage(page);
 
     // Step 1: Validate on the Patient Listing Section, by clicking on the Add Patient button the Add New Patient popup is displayed
     console.log("STEP 1: Navigating to Patients tab...");
-    await patient.gotoPatientsTab();
+    await patient.navigateToPatientsTab(loginPage);
     await expect(patient.addPatientBtn).toBeVisible();
     
     console.log("STEP 1: Clicking Add Patient button...");
@@ -76,7 +61,6 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
   test('TC22. Validate all fields, controls, and functionality in Add New Patient popup', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
     const patient = new PatientPage(page);
 
     // Generate test data
@@ -91,7 +75,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     const testPhone = '(555) 123-4567';
 
     console.log("STEP 1: Navigating to Patients tab..."); 
-    await patient.gotoPatientsTab();
+    await patient.navigateToPatientsTab(loginPage);
 
     await expect(patient.addPatientBtn).toBeVisible();  
     console.log("STEP 2: Opening Add Patient modal...");
@@ -159,8 +143,6 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
   test('TC23. Add new patient and validate checkboxes, Save/Cancel buttons and Patient Demographics page', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
-  
     const patient = new PatientPage(page);
   
     // Generate test data
@@ -198,7 +180,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     console.log(`PATIENT DATA SAVED TO: ${filePath}`);
   
     // Begin test execution
-    await patient.gotoPatientsTab();
+    await patient.navigateToPatientsTab(loginPage);
     await patient.openAddPatientModal();
     await expect(patient.modalTitle).toBeVisible();
 
@@ -245,8 +227,6 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
   test('TC24. Check duplicate patient validation', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
-  
     const patient = new PatientPage(page);
 
     // Load patient data from JSON (created in test TC22)
@@ -261,7 +241,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
     // Begin test execution
     console.log('STEP 1: Navigating to Patients tab...');
-    await patient.gotoPatientsTab();
+    await patient.navigateToPatientsTab(loginPage);
     await expect(patient.addPatientBtn).toBeVisible();
     
     console.log('STEP 2: Opening Add Patient modal...');
@@ -277,12 +257,10 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
   test('TC25. Edit existing patient details and update', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
-  
     const patient = new PatientPage(page);
   
     console.log("STEP 1: Navigate to Patients tab");
-    await patient.gotoPatientsTab();
+    await patient.navigateToPatientsTab(loginPage);
     await expect(patient.searchPatientInput).toBeVisible({ timeout: 10000 });
 
     // Load patient data from JSON
@@ -309,12 +287,10 @@ test.describe('Patient Module - Add Patient Flow', () => {
   
   test('TC26. Add Insurance for Existing Patient', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
-  
     const patient = new PatientPage(page);
   
     console.log("STEP 1: Navigate to Patients tab");
-    await patient.gotoPatientsTab();
+    await patient.navigateToPatientsTab(loginPage);
     await expect(patient.searchPatientInput).toBeVisible({ timeout: 10000 });
 
     // Load patient data from JSON
@@ -347,19 +323,10 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
   test('TC27. Validate Card View and Table View functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
     const patient = new PatientPage(page);
 
     // Navigate to Patients tab
-    console.log("ACTION: Navigating to Patients tab...");
-    await patient.gotoPatientsTab();
-    
-    // Wait for Patients page to load
-    await expect(patient.searchPatientInput).toBeVisible({ timeout: 15000 });
-    await expect(patient.cardViewIcon).toBeVisible({ timeout: 10000 });
-    await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
-    await page.waitForTimeout(2000);
-    console.log("ASSERT: Patients page has loaded");
+    await patient.navigateToPatientsTab(loginPage);
 
     // Validate and navigate to Card View
     await patient.validateAndNavigateToCardView();
@@ -373,19 +340,10 @@ test.describe('Patient Module - Add Patient Flow', () => {
   
   test('TC28. Validate Patient Grid displays Patient ID, First Name, Last Name, DOB, Phone and DE information and sorting', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
     const patient = new PatientPage(page);
 
     // Navigate to Patients tab
-    console.log("ACTION: Navigating to Patients tab...");
-    await patient.gotoPatientsTab();
-    
-    // Wait for Patients page to load
-    await expect(patient.searchPatientInput).toBeVisible({ timeout: 15000 });
-    await expect(patient.addPatientBtn).toBeVisible({ timeout: 10000 });
-    await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
-    await page.waitForTimeout(2000);
-    console.log("ASSERT: Patients page has loaded");
+    await patient.navigateToPatientsTab(loginPage);
 
     // Validate grid information for patient records
     await patient.validatePatientGridInformation(10);
@@ -396,17 +354,10 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
   test('TC29. Validate navigation to Patient Detail page from Patient Grid', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
     const patient = new PatientPage(page);
 
     // Navigate to Patients tab
-    console.log("ACTION: Navigating to Patients tab...");
-    await patient.gotoPatientsTab();
-    await expect(patient.searchPatientInput).toBeVisible({ timeout: 15000 });
-    await expect(patient.addPatientBtn).toBeVisible({ timeout: 10000 });
-    await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
-    await page.waitForTimeout(2000);
-    console.log("ASSERT: Patients page has loaded");
+    await patient.navigateToPatientsTab(loginPage);
 
     // Wait for patient grid to load
     console.log("ACTION: Waiting for patient grid to load...");
@@ -418,19 +369,11 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
   test('TC30. Validate Action Icons are displayed and Non-Productive Encounter count functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
     const patient = new PatientPage(page);
 
     // Navigate to Patients tab
     console.log("ACTION: Navigating to Patients tab...");
-    await patient.gotoPatientsTab();
-    
-    // Wait for Patients page to load
-    await expect(patient.searchPatientInput).toBeVisible({ timeout: 15000 });
-    await expect(patient.addPatientBtn).toBeVisible({ timeout: 10000 });
-    await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
-    await page.waitForTimeout(2000);
-    console.log("ASSERT: Patients page has loaded");
+    await patient.navigateToPatientsTab(loginPage);
 
     // Wait for patient grid to load
     console.log("ACTION: Waiting for patient grid to load...");
@@ -448,17 +391,10 @@ test.describe('Patient Module - Add Patient Flow', () => {
   
   test('TC31. Validate Inactive Patient Icon functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
     const patient = new PatientPage(page);
 
     // Navigate to Patients tab
-    console.log("ACTION: Navigating to Patients tab...");
-    await patient.gotoPatientsTab();
-    await expect(patient.searchPatientInput).toBeVisible({ timeout: 15000 });
-    await expect(patient.addPatientBtn).toBeVisible({ timeout: 10000 });
-    await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
-    await page.waitForTimeout(2000);
-    console.log("ASSERT: Patients page has loaded");
+    await patient.navigateToPatientsTab(loginPage);
 
     // Wait for patient grid to load
     console.log("ACTION: Waiting for patient grid to load...");
@@ -473,17 +409,10 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
   test('TC32. Validate Messaging/Chat Icon functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
     const patient = new PatientPage(page);
 
     // Navigate to Patients tab
-    console.log("ACTION: Navigating to Patients tab...");
-    await patient.gotoPatientsTab();
-    await expect(patient.searchPatientInput).toBeVisible({ timeout: 15000 });
-    await expect(patient.addPatientBtn).toBeVisible({ timeout: 10000 });
-    await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
-    await page.waitForTimeout(2000);
-    console.log("ASSERT: Patients page has loaded");
+    await patient.navigateToPatientsTab(loginPage);
 
     // Wait for patient grid to load
     console.log("ACTION: Waiting for patient grid to load...");
@@ -498,17 +427,10 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
   test('TC33. Validate Print Icon functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
-    await loginPage.navigateToDashboard();
     const patient = new PatientPage(page);
 
     // Navigate to Patients tab
-    console.log("ACTION: Navigating to Patients tab...");
-    await patient.gotoPatientsTab();
-    await expect(patient.searchPatientInput).toBeVisible({ timeout: 15000 });
-    await expect(patient.addPatientBtn).toBeVisible({ timeout: 10000 });
-    await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
-    await page.waitForTimeout(2000);
-    console.log("ASSERT: Patients page has loaded");
+    await patient.navigateToPatientsTab(loginPage);
 
     // Wait for patient grid to load
     console.log("ACTION: Waiting for patient grid to load...");
@@ -519,5 +441,56 @@ test.describe('Patient Module - Add Patient Flow', () => {
 
     // Validate Print Icon functionality
     await patient.validatePrintIconFunctionality();
+  });
+
+  test('TC34. Validate Treatment Plan Icon functionality', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const patient = new PatientPage(page);
+
+    // Navigate to Patients tab
+    await patient.navigateToPatientsTab(loginPage);
+
+    // Wait for patient grid to load
+    console.log("ACTION: Waiting for patient grid to load...");
+    await expect(patient.patientRows.first()).toBeVisible({ timeout: 15000 }).catch(() => {
+      console.log("WARNING: Patient grid may be empty or still loading");
+    });
+    await page.waitForTimeout(1000);
+
+    // Validate Treatment Plan Icon functionality
+    // await patient.validateTreatmentPlanYellowIcon();
+    await patient.validateTreatmentPlanRedIcon();
+  });
+
+  test('TC35. Validate Video Call Invitation Icon functionality', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const patient = new PatientPage(page);
+
+    // Navigate to Patients tab
+    await patient.navigateToPatientsTab(loginPage);
+
+    // Wait for patient grid to load
+    console.log("ACTION: Waiting for patient grid to load...");
+    await expect(patient.patientRows.first()).toBeVisible({ timeout: 15000 }).catch(() => {
+      console.log("WARNING: Patient grid may be empty or still loading");
+    });
+    await page.waitForTimeout(1000);
+
+    // Validate Video Call Icon and DE Column functionality
+    await patient.validateVideoCallIconFunctionality();
+    await patient.validateDEColumnUpdatesToYes();
+  });
+  
+  test('TC36. Validate pagination functionality', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const patient = new PatientPage(page);
+
+    // Navigate to Patients tab
+    await patient.navigateToPatientsTab(loginPage);
+
+    // Validate pagination functionality
+    await patient.validatePaginationEnabledAndDefaultRecords();
+    await patient.validateItemsPerPageSelection();
+    await patient.validatePaginationNavigation();
   });
 });
