@@ -34,7 +34,7 @@ test.describe('Login scenarios', () => {
         expect(page.url()).toContain('/dashboard');
     });
 
-    test('TC04-Check Forgot Password Flow', async ({ page }) => {
+    test('TC04 - Check Forgot Password Flow', async ({ page }) => {
         const login = new LoginPage(page);
 
         // 1️⃣ Navigate to Login page
