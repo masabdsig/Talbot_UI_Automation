@@ -1,3 +1,6 @@
+// Load environment variables from .env file
+require('dotenv').config();
+
 const { test, expect } = require('@playwright/test');
 const { LoginPage } = require('../pages/LoginPage');
 const { faker } = require('@faker-js/faker');
@@ -33,7 +36,7 @@ test.describe('Login scenarios', () => {
         expect(page.url()).toContain('/dashboard');
     });
 
-    test('TC04 - Check Forgot Password Flow', async ({ page }) => {
+    test.only('TC04 - Check Forgot Password Flow', async ({ page }) => {
         const login = new LoginPage(page);
         const testEmail = process.env.TEST_EMAIL || 'test@example.com';
         const senderEmail = process.env.SENDER_EMAIL || 'admin@example.com';
