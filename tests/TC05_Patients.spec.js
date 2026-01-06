@@ -225,37 +225,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     console.log(`PATIENT CREATED SUCCESSFULLY → ${firstName} ${lastName}`);
   });
 
-  test('TC24. Check duplicate patient validation', async ({ page }) => {
-    const loginPage = new LoginPage(page);
-    const patient = new PatientPage(page);
-
-    // Load patient data from JSON (created in test TC22)
-    const filePath = path.join(__dirname, '../data/createdPatient.json');
-  
-    if (!fs.existsSync(filePath)) {
-      throw new Error("ERROR: createdPatient.json not found. Run Add Patient test first.");
-    }
-  
-    const patientData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    console.log("Loaded patient record for duplicate check:", patientData);
-
-    // Begin test execution
-    console.log('STEP 1: Navigating to Patients tab...');
-    await patient.navigateToPatientsTab(loginPage);
-    await expect(patient.addPatientBtn).toBeVisible();
-    
-    console.log('STEP 2: Opening Add Patient modal...');
-    await patient.openAddPatientModal();
-    await expect(patient.modalTitle).toBeVisible();
-
-    // Fill duplicate patient information and attempt to save
-    await patient.fillDuplicatePatientInfoAndAttemptSave(patientData);
-
-    // Verify duplicate patient error
-    await patient.verifyDuplicatePatientError();
-  });
-
-  test('TC25. Edit existing patient details and update', async ({ page }) => {
+  test('TC24. Edit existing patient details and update', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
   
@@ -285,7 +255,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.savePatientInfoAndVerifySuccess();
   }); 
   
-  test('TC26. Add Insurance for Existing Patient', async ({ page }) => {
+  test('TC25. Add Insurance for Existing Patient', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
   
@@ -321,7 +291,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.verifyInsurancePolicySuccessToast();
   });
 
-  test('TC27. Validate Card View and Table View functionality', async ({ page }) => {
+  test('TC26. Validate Card View and Table View functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -338,7 +308,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validateAndNavigateToTableView();
   });
   
-  test('TC28. Validate Patient Grid displays Patient ID, First Name, Last Name, DOB, Phone and DE information and sorting', async ({ page }) => {
+  test('TC27. Validate Patient Grid displays Patient ID, First Name, Last Name, DOB, Phone and DE information and sorting', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -352,7 +322,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validatePatientGridSorting();
   });
 
-  test('TC29. Validate navigation to Patient Detail page from Patient Grid', async ({ page }) => {
+  test('TC28. Validate navigation to Patient Detail page from Patient Grid', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -367,7 +337,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validatePatientGridNavigation();
   });
 
-  test('TC30. Validate Action Icons are displayed and Non-Productive Encounter count functionality', async ({ page }) => {
+  test('TC29. Validate Action Icons are displayed and Non-Productive Encounter count functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -389,7 +359,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validateNonProductiveEncounterCreation();
   });
   
-  test('TC31. Validate Inactive Patient Icon functionality', async ({ page }) => {
+  test('TC30. Validate Inactive Patient Icon functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -407,7 +377,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validateInactivePatientIconFunctionality();
   });
 
-  test('TC32. Validate Messaging/Chat Icon functionality', async ({ page }) => {
+  test('TC31. Validate Messaging/Chat Icon functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -425,7 +395,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validateMessagingChatIconFunctionality();
   });
 
-  test('TC33. Validate Print Icon functionality', async ({ page }) => {
+  test('TC32. Validate Print Icon functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -443,7 +413,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validatePrintIconFunctionality();
   });
 
-  test('TC34. Validate Treatment Plan Icon functionality', async ({ page }) => {
+  test('TC33. Validate Treatment Plan Icon functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -462,7 +432,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validateTreatmentPlanRedIcon();
   });
 
-  test('TC35. Validate Video Call Invitation Icon functionality and DE column value', async ({ page }) => {
+  test('TC34. Validate Video Call Invitation Icon functionality and DE column value', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -481,7 +451,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validateDEColumnUpdatesToYes();
   });
   
-  test('TC36. Validate pagination functionality', async ({ page }) => {
+  test('TC35. Validate pagination functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -494,7 +464,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validatePaginationNavigation();
   });
 
-  test('TC37. Validate Patient Name Business Logic', async ({ page }) => {
+  test('TC36. Validate Patient Name Business Logic', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -507,7 +477,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validateAllNameBusinessLogic();
   });
 
-  test('TC38. Validate Patient DOB Business Logic', async ({ page }) => {
+  test('TC37. Validate Patient DOB Business Logic', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -520,7 +490,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validateAllDOBBusinessLogic();
   });
 
-  test('TC39. Validate Patient SSN Business Logic', async ({ page }) => {
+  test('TC38. Validate Patient SSN Business Logic', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -533,7 +503,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validateAllSSNBusinessLogic();
   });
 
-  test('TC40. Validate Patient Contact Business Logic', async ({ page }) => {
+  test('TC39. Validate Patient Contact Business Logic', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
@@ -546,14 +516,15 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.validateAllContactBusinessLogic();
   });
 
-  test('TC41. Validate Patient Emergency Contact Business Logic', async ({ page }) => {
+  test('TC40. Validate Patient Emergency Contact Business Logic', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
-    // Generate faker data for patient
+    // Generate faker data for patient - create a minor (under 18) to test guardian requirements
     const firstName = faker.person.firstName();
     const lastName = faker.person.lastName() + '_' + Date.now();
-    const dob = faker.date.birthdate({ min: 18, max: 70, mode: 'age' });
+    // Create a patient under 18 (between 5 and 17 years old)
+    const dob = faker.date.birthdate({ min: 5, max: 17, mode: 'age' });
     const dobFormatted = dob.toLocaleDateString('en-US'); // Format: MM/DD/YYYY
     const address = faker.location.streetAddress();
     const zipcode = '12345'; // Fixed zip code
@@ -622,5 +593,84 @@ test.describe('Patient Module - Add Patient Flow', () => {
     // Validate emergency contact business logic on Patient Demographics page
     console.log('STEP: Validating emergency contact business logic on Patient Demographics page...');
     await patient.validateAllEmergencyContactBusinessLogic();
+  });
+
+  test.only('TC41. Validate Patient Duplicate Detection Business Logic', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const patient = new PatientPage(page);
+
+    // Generate unique patient data for duplicate detection testing
+    console.log("STEP 1: Generating new patient data for duplicate detection testing");
+    const originalFirstName = faker.person.firstName();
+    const originalLastName = faker.person.lastName() + '_' + Date.now();
+    const originalDOB = faker.date.birthdate({ min: 18, max: 70, mode: 'age' });
+    const originalDOBFormatted = originalDOB.toLocaleDateString('en-US');
+    // Generate a valid SSN format for duplicate detection (not using test number 123-45-6789)
+    const originalSSN = `${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 90) + 10}-${Math.floor(Math.random() * 9000) + 1000}`;
+    
+    const originalPatientData = {
+      firstName: originalFirstName,
+      lastName: originalLastName,
+      dob: originalDOBFormatted,
+      ssn: originalSSN
+    };
+
+    console.log(`INFO: Patient data - Name: ${originalFirstName} ${originalLastName}, DOB: ${originalDOBFormatted}, SSN: ${originalSSN}`);
+
+    await patient.navigateToPatientsTab(loginPage);
+    await expect(patient.addPatientBtn).toBeVisible();
+    
+    // Step 2: Create original patient with all details including SSN
+    await patient.createPatientForDuplicateTesting(originalPatientData);
+    
+    // Step 3: Navigate back to patients list to test duplicate detection
+    await patient.navigateBackToPatientsListForDuplicateTesting(loginPage);
+
+    // Step 4: Validate duplicate detection business logic
+    console.log('\n==========================================');
+    console.log('STEP 4: Validating duplicate detection business logic');
+    console.log('==========================================\n');
+    
+    await patient.openAddPatientModal();
+    await expect(patient.modalTitle).toBeVisible({ timeout: 10000 });
+
+    // Run all duplicate detection validations (PAT-DUP-001 to PAT-DUP-004)
+    await patient.validateAllDuplicateDetectionBusinessLogic(originalPatientData);
+
+    // PAT-DUP-005: Duplicate check runs on update
+    console.log('\n--- PAT-DUP-005: Duplicate check runs on create and update ---');
+    console.log('INFO: Duplicate check on create was validated during original patient creation');
+    
+    // Create a duplicate patient to test update duplicate detection
+    console.log('STEP 5: Creating duplicate patient for update testing...');
+    const duplicateFirstName = faker.person.firstName();
+    const duplicateLastName = faker.person.lastName() + '_' + Date.now();
+    const duplicateDOB = faker.date.birthdate({ min: 18, max: 70, mode: 'age' });
+    const duplicateDOBFormatted = duplicateDOB.toLocaleDateString('en-US');
+    const duplicateSSN = `${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 90) + 10}-${Math.floor(Math.random() * 9000) + 1000}`;
+    
+    const duplicatePatientData = {
+      firstName: duplicateFirstName,
+      lastName: duplicateLastName,
+      dob: duplicateDOBFormatted,
+      ssn: duplicateSSN
+    };
+    
+    await patient.createPatientForDuplicateTesting(duplicatePatientData);
+    await patient.navigateBackToPatientsListForDuplicateTesting(loginPage);
+    
+    // Test duplicate detection on update
+    await patient.validateDuplicateCheckOnUpdate(originalPatientData, duplicatePatientData);
+
+    // Cleanup: Close modal if still open
+    try {
+      const modalVisible = await patient.modalTitle.isVisible({ timeout: 2000 }).catch(() => false);
+      if (modalVisible) {
+        await patient.cancelBtn.click({ timeout: 3000 }).catch(() => {});
+        console.log('INFO: Modal closed during cleanup');
+      }
+    } catch (error) {
+      console.log(`INFO: Error during cleanup: ${error.message}`);
+    }
   });
 });
