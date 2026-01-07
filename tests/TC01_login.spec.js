@@ -75,7 +75,7 @@ test.describe('Login scenarios', () => {
         console.log('\n✔️ TC03 completed: Login successful with valid credentials and session saved');
     });
 
-    test.only('TC04 - Check Forgot Password Flow', async ({ page }) => {
+    test('TC04 - Check Forgot Password Flow', async ({ page }) => {
         const login = new LoginPage(page);
         const testEmail = process.env.TEST_EMAIL || 'mishrasum2022@gmail.com';
         const senderEmail = process.env.SENDER_EMAIL || 'admin@atcemr.com';
