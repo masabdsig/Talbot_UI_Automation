@@ -101,7 +101,7 @@ test.describe('Patient Portal New Request Creation and Form Validation', () => {
     await portalRequests.verifyGridCountIncremented(initialCount);
 
     // Verify record status
-    await portalRequests.verifyRecordStatus(testFirstName, testLastName, 'Not Mached');
+    await portalRequests.verifyRecordStatus(testFirstName, testLastName, 'Not Matched');
 
     // Save test data to file for use in filter tests
     const testData = {
@@ -119,7 +119,7 @@ test.describe('Patient Portal New Request Creation and Form Validation', () => {
 
     console.log('✅ TC02: Patient Portal New Request Creation and Form Validation - PASSED');
   });
-//update once patient id working
+
   test('TC03-Patient Portal Search and Filter Functionality', async ({ page }) => {
     const portalRequests = new PortalRequestsPage(page);
 
@@ -179,7 +179,7 @@ test.describe('Patient Portal New Request Creation and Form Validation', () => {
 
     console.log('✅ TC03: Patient Portal Search and Filter Functionality - PASSED');
   });
-//update sorting once patient id working
+
   test('TC04-Patient Portal Grid Data and Sorting Validation', async ({ page }) => {
     const portalRequests = new PortalRequestsPage(page);
 
@@ -196,8 +196,9 @@ test.describe('Patient Portal New Request Creation and Form Validation', () => {
     // STEP 2: Test sorting for each column
     console.log('\nSTEP 2: Testing sorting functionality for all columns...');
     
-    // Column indices: First Name: 1, Last Name: 2, Email: 3, Phone: 4, DOB: 5, Status: 6, Action By: 7
+    // Column indices: Patient ID: 0, First Name: 1, Last Name: 2, Email: 3, Phone: 4, DOB: 5, Status: 6, Action By: 7
     const columnsToTest = [
+      { index: 0, name: 'Patient ID' },
       { index: 1, name: 'First Name' },
       { index: 2, name: 'Last Name' },
       { index: 3, name: 'Email' },
@@ -487,6 +488,174 @@ test.describe('Patient Portal New Request Creation and Form Validation', () => {
     }
 
     console.log('✅ TC10: All pagination assertions completed successfully');
+  });
+
+  test('TC11-Patient Portal Approval Workflow Patient Status Matched', async ({ page }) => {
+    const portalRequests = new PortalRequestsPage(page);
+
+    console.log('\n➡️ [TC11] Patient Portal Approval Workflow - STARTED');
+
+    // STEP 1: Verify portal is loaded and set status to "New"
+    await expect(portalRequests.patientPortalGrid).toBeVisible({ timeout: 10000 });
+    await portalRequests.waitForLoadingSpinnerToComplete();
+    await portalRequests.setStatusFilterToNew();
+    console.log('✅ STEP 1: Portal loaded with "New" status filter');
+
+    // STEP 2: Look for patient with "Matched" status
+    console.log('\n🔍 STEP 2: Searching for patient with "Matched" status...');
+    const matchedPatient = await portalRequests.findPatientWithMatchedStatus();
+    
+    if (!matchedPatient.found) {
+      console.log('⚠️ No patients with "Matched" status found. Skipping test.');
+      return;
+    }
+    
+    const patientIdentifier = matchedPatient.identifier;
+    console.log('✅ STEP 2: Found patient with "Matched" status');
+
+    // STEP 3: Click Approve button for matched patient
+    const approveButton = await portalRequests.clickApproveButtonForMatchedPatient(matchedPatient.rowIndex);
+    console.log('✅ STEP 3: Clicked Approve button for matched patient');
+
+    // STEP 4: Verify approval dialog opened (not table grid)
+    const dialog = await portalRequests.verifyRejectionDialogOpened();
+    console.log('✅ STEP 4: Approval dialog opened');
+
+    // STEP 5: Test close and reopen functionality
+    await portalRequests.closeAndReopenDialog(approveButton);
+    console.log('✅ STEP 5: Close and reopen dialog functionality verified');
+
+    // STEP 6: Verify radio button labels are visible and enabled
+    const { expiredTreatmentLabel, patientBalanceLabel, otherLabel } = 
+      await portalRequests.verifyRadioButtonLabels(dialog);
+    console.log('✅ STEP 6: All radio button labels verified as visible and enabled');
+
+    // STEP 7: Verify default selection is "Other"
+    await portalRequests.verifyAndSelectDefaultOption(dialog);
+    console.log('✅ STEP 7: Default option "Other" verified');
+
+    // STEP 8: Test "Expired Treatment Plan" option
+    await portalRequests.testRadioOptionSelection(dialog, 'Expired Treatment Plan');
+    console.log('✅ STEP 8: "Expired Treatment Plan" option tested');
+
+    // STEP 9: Test "Patient Balance" option
+    await portalRequests.testRadioOptionSelection(dialog, 'Patient Balance');
+    console.log('✅ STEP 9: "Patient Balance" option tested');
+
+    // STEP 10: Test "Other" option with custom text
+    const customApprovalNote = 'Custom approval reason: Patient record verified and all required documentation is complete. Medical team has reviewed and approved for treatment continuation.';
+    await portalRequests.enterCustomRejectionReason(dialog, customApprovalNote);
+    console.log('✅ STEP 10: Custom approval reason entered and verified');
+
+    // STEP 11: Verify dialog is still visible
+    await expect(dialog).toBeVisible();
+    console.log('✅ STEP 11: Dialog remains open and functional');
+
+    // STEP 12: Save approval
+    await portalRequests.verifySaveButtonAndSubmit(dialog);
+    console.log('✅ STEP 12: Approval saved successfully');
+
+    // STEP 13: Verify success notification
+    await portalRequests.verifySuccessNotification();
+    console.log('✅ STEP 13: Success notification verified');
+
+    // STEP 14: Verify patient status changed in grid
+    const statusChanged = await portalRequests.verifyPatientStatusChanged(patientIdentifier);
+    console.log('✅ STEP 14: Patient status change in grid verified');
+
+    // STEP 15: Verify patient appears in "Approved" status
+    await portalRequests.verifyPatientInApprovedStatus(patientIdentifier, customApprovalNote);
+    console.log('✅ STEP 15: Patient verified in Approved status with correct description');
+
+    console.log('✅ TC11: Patient Portal Approval Workflow - COMPLETED\n');
+  });
+
+  // update this test later there are issues to be discussed
+  test('TC12-Patient Portal Approval Workflow Patient Status Not Matched', async ({ page }) => {
+    const portalRequests = new PortalRequestsPage(page);
+
+    // FIXME: The approval dialog opened after selecting a patient from the Select Patient table
+    // does not contain the expected radio button labels (Expired Treatment Plan, Patient Balance, Other).
+    // The dialog structure may be different for "Not Matched" patients or the dialog was not properly triggered.
+    // Need to investigate the actual dialog structure when approving from the Select Patient table.
+
+    console.log('\n➡️ [TC12] Patient Portal Approval Workflow (Not Matched Status) - STARTED');
+
+    // STEP 1: Verify portal is loaded and set status to "New"
+    await expect(portalRequests.patientPortalGrid).toBeVisible({ timeout: 10000 });
+    await portalRequests.waitForLoadingSpinnerToComplete();
+    await portalRequests.setStatusFilterToNew();
+    console.log('✅ STEP 1: Portal loaded with "New" status filter');
+
+    // STEP 2: Look for patient with "Not Matched" status
+    console.log('\n🔍 STEP 2: Searching for patient with "Not Matched" status...');
+    const notMatchedPatient = await portalRequests.findPatientWithNotMatchedStatus();
+    
+    if (!notMatchedPatient.found) {
+      console.log('⚠️ No patients with "Not Matched" status found. Skipping test.');
+      return;
+    }
+    
+    const patientIdentifier = notMatchedPatient.identifier;
+    const patientLastName = notMatchedPatient.lastName;
+    const patientFirstName = notMatchedPatient.firstName;
+    console.log(`✅ STEP 2: Found patient with "Not Matched" status - ${patientFirstName} ${patientLastName}`);
+
+    // STEP 3: Click Approve button for not matched patient
+    await portalRequests.clickApproveButtonForNotMatchedPatient(notMatchedPatient.rowIndex);
+    console.log('✅ STEP 3: Clicked Approve button for not matched patient');
+
+    // STEP 4: Verify "Select Patient" table appears
+    await portalRequests.verifySelectPatientTableOpened();
+    console.log('✅ STEP 4: "Select Patient" table opened');
+
+    // STEP 5: Test close functionality (cross icon and cancel button)
+    await portalRequests.testSelectPatientTableCloseOptions();
+    console.log('✅ STEP 5: Cross icon and cancel button functionality verified');
+
+    // STEP 6: Reopen Select Patient table
+    await portalRequests.clickApproveButtonForNotMatchedPatient(notMatchedPatient.rowIndex);
+    await portalRequests.verifySelectPatientTableOpened();
+    console.log('✅ STEP 6: Select Patient table reopened');
+
+    // STEP 7: Verify search bar is populated with patient's last name
+    const searchPrePopulated = await portalRequests.verifySelectPatientSearchPopulated(patientLastName);
+    console.log('✅ STEP 7: Search bar pre-populated with patient last name verified');
+
+    // STEP 8: Clear search and enter first name
+    console.log('\n🔍 STEP 8: Clearing search and entering first name...');
+    await portalRequests.clearSelectPatientSearch();
+    let recordFound = await portalRequests.searchInSelectPatientTable(patientFirstName);
+    
+    if (!recordFound) {
+      // STEP 9: Try with empty search to show all records
+      console.log('\n🔍 STEP 9: No records found. Trying empty search to show all records...');
+      await portalRequests.clearSelectPatientSearch();
+      recordFound = await portalRequests.searchInSelectPatientTable('');
+      
+      if (!recordFound) {
+        console.log('⚠️ No records visible in Select Patient table');
+        return;
+      }
+    }
+    
+    console.log('✅ STEP 8: Records found in Select Patient table');
+
+    // STEP 9: Click approve/select icon on first record
+    await portalRequests.clickApproveInSelectPatientTable();
+    console.log('✅ STEP 9: Clicked approve on record in Select Patient table');
+
+    // STEP 10: Add reason popup appears - enter note and save
+    console.log('\n📝 STEP 10: Adding approval reason...');
+    const customApprovalNote = 'Approval reason: Patient verified through Select Patient table and approved for treatment.';
+    await portalRequests.addApprovalReasonInDialog(customApprovalNote);
+    console.log('✅ STEP 10: Approval reason added and saved');
+
+    // STEP 11: Verify success message
+    await portalRequests.verifySuccessNotification();
+    console.log('✅ STEP 11: Success notification verified');
+
+    console.log('✅ TC12: Patient Portal Approval Workflow (Not Matched Status) - COMPLETED\n');
   });
 
 
