@@ -3,8 +3,14 @@ import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load environment variables from .env at the repo root.
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+// Load environment variables from .env and .env.local at the repo root.
+// Priority order (highest to lowest):
+// 1. Environment variables set directly (e.g., GitHub Actions secrets)
+// 2. .env.local (for local development - gitignored)
+// 3. .env (for CI/shared config)
+// Note: dotenv.config() silently fails if file doesn't exist, so this works in both CI and local
+dotenv.config({ path: path.resolve(__dirname, '.env') }); // Load .env (used in CI)
+dotenv.config({ path: path.resolve(__dirname, '.env.local') }); // Load .env.local (local only, gitignored)
 
 /**
  * @see https://playwright.dev/docs/test-configuration

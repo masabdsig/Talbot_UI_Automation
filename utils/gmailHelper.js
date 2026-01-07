@@ -1,7 +1,14 @@
 const { google } = require("googleapis");
 const fs = require("fs");
 const path = require("path");
-require("dotenv").config();
+// Load environment variables from .env and .env.local files
+// Priority order (highest to lowest):
+// 1. Environment variables set directly (e.g., GitHub Actions secrets)
+// 2. .env.local (for local development - gitignored)
+// 3. .env (for CI/shared config)
+// Note: dotenv.config() silently fails if file doesn't exist, so this works in both CI and local
+require("dotenv").config(); // Load .env (used in CI)
+require("dotenv").config({ path: '.env.local' }); // Load .env.local (local only, gitignored)
 
 const TOKEN_PATH = path.join(process.cwd(), "token.json");
 const CREDENTIALS_PATH = path.join(process.cwd(), "utils/credentials.json");
@@ -64,15 +71,27 @@ async function authorize() {
         GOOGLE_REFRESH_TOKEN
     } = process.env;
 
+    // Validate required environment variables
+    if (!GOOGLE_CLIENT_ID) {
+        throw new Error('GOOGLE_CLIENT_ID is not set in environment variables. Please check your .env or .env.local file.');
+    }
+    if (!GOOGLE_CLIENT_SECRET) {
+        throw new Error('GOOGLE_CLIENT_SECRET is not set in environment variables. Please check your .env or .env.local file.');
+    }
+    if (!GOOGLE_REDIRECT_URI) {
+        throw new Error('GOOGLE_REDIRECT_URI is not set in environment variables. Please check your .env or .env.local file.');
+    }
+    if (!GOOGLE_REFRESH_TOKEN) {
+        throw new Error('GOOGLE_REFRESH_TOKEN is not set in environment variables. Please check your .env or .env.local file.');
+    }
+
     const oAuth2Client = new google.auth.OAuth2(
         GOOGLE_CLIENT_ID,
         GOOGLE_CLIENT_SECRET,
         GOOGLE_REDIRECT_URI
     );
 
-    if (GOOGLE_REFRESH_TOKEN) {
-        oAuth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
-    }
+    oAuth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
 
     return oAuth2Client;
 }
@@ -115,7 +134,16 @@ function decodeBody(message) {
 }
 
 async function getLatestEmail(subjectContains, fromEmail = null, maxResults = 10, afterTimestamp = null) {
-    const auth = await authorize();
+    let auth;
+    try {
+        auth = await authorize();
+    } catch (error) {
+        if (error.message.includes('not set in environment variables')) {
+            throw error;
+        }
+        throw new Error(`Failed to authorize Gmail API: ${error.message}`);
+    }
+    
     const gmail = google.gmail({ version: "v1", auth });
 
     let query = '';
@@ -132,11 +160,30 @@ async function getLatestEmail(subjectContains, fromEmail = null, maxResults = 10
 
     if (!query) query = 'is:unread';
 
-    const res = await gmail.users.messages.list({
-        userId: "me",
-        q: query,
-        maxResults: maxResults,
-    });
+    let res;
+    try {
+        res = await gmail.users.messages.list({
+            userId: "me",
+            q: query,
+            maxResults: maxResults,
+        });
+    } catch (error) {
+        if (error.message && error.message.includes('invalid_grant')) {
+            throw new Error(
+                'invalid_grant: Your Google OAuth refresh token is invalid or expired. ' +
+                'This usually happens when:\n' +
+                '  1. The refresh token has expired\n' +
+                '  2. The refresh token doesn\'t match the client ID/secret in your .env.local file\n' +
+                '  3. The token was revoked\n\n' +
+                'To fix this:\n' +
+                '  1. Verify your GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN in .env.local are correct\n' +
+                '  2. If using token.json, ensure it matches your current credentials\n' +
+                '  3. You may need to regenerate your refresh token by running: node scripts/authorizeGmail.js\n' +
+                '  4. Make sure your .env.local file is in the project root directory'
+            );
+        }
+        throw error;
+    }
 
     if (!res.data.messages?.length) {
         console.log(`⚠️ No emails found with query: ${query}`);

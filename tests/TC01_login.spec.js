@@ -1,5 +1,11 @@
-// Load environment variables from .env file
-require('dotenv').config();
+// Load environment variables from .env and .env.local files
+// Priority order (highest to lowest):
+// 1. Environment variables set directly (e.g., GitHub Actions secrets)
+// 2. .env.local (for local development - gitignored)
+// 3. .env (for CI/shared config)
+// Note: dotenv.config() silently fails if file doesn't exist, so this works in both CI and local
+require('dotenv').config(); // Load .env (used in CI)
+require('dotenv').config({ path: '.env.local' }); // Load .env.local (local only, gitignored)
 
 const { test, expect } = require('@playwright/test');
 const { LoginPage } = require('../pages/LoginPage');
@@ -69,7 +75,7 @@ test.describe('Login scenarios', () => {
         console.log('\n✔️ TC03 completed: Login successful with valid credentials and session saved');
     });
 
-    test('TC04 - Check Forgot Password Flow', async ({ page }) => {
+    test.only('TC04 - Check Forgot Password Flow', async ({ page }) => {
         const login = new LoginPage(page);
         const testEmail = process.env.TEST_EMAIL || 'mishrasum2022@gmail.com';
         const senderEmail = process.env.SENDER_EMAIL || 'admin@atcemr.com';
