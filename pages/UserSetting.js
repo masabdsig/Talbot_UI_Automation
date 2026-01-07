@@ -62,9 +62,10 @@ export class DashboardLocators {
         this.weekdayCheckbox = (day) =>
             page.locator(`label:has-text("${day}")`).locator('input[type="checkbox"]');
 
-        // Radio buttons
-        this.availableRadio = page.locator('label[for="e-radio_49"]');
-        this.unavailableRadio = page.locator('label[for="e-radio_50"]');
+        // Radio buttons - use text-based selector for more reliability
+        // Find label containing "Available" text, with fallback to ID-based selector
+        this.availableRadio = page.locator('label:has-text("Available")').first().or(page.locator('label[for="e-radio_49"]'));
+        this.unavailableRadio = page.locator('label:has-text("Unavailable")').first().or(page.locator('label[for="e-radio_50"]'));
 
         // Datepickers
         this.fromDateInput = page.locator('#from_date_datepicker_input');

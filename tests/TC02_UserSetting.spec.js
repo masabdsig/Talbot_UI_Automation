@@ -241,9 +241,15 @@ test('TC10 Validate Provider Availability and add new availability', async ({ pa
 
   console.log('➡️ Selecting Wednesday...');
   await dashboard.weekdayCheckbox("Wednesday").check();
+  
+  // Wait a moment for the form to update after checkbox selection
+  await page.waitForTimeout(500);
 
   console.log('➡️ Selecting Available...');
-  await dashboard.availableRadio.click();
+  // Wait for the radio button to be visible and enabled before clicking
+  await expect(dashboard.availableRadio).toBeVisible({ timeout: 10000 });
+  await dashboard.availableRadio.scrollIntoViewIfNeeded();
+  await dashboard.availableRadio.click({ timeout: 10000 });
 
   console.log('➡️ Selecting From Date (Next Day)...');
   await dashboard.fromDateIcon.click();

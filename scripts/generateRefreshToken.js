@@ -7,6 +7,16 @@ require("dotenv").config({ path: '.env.local' });
 /**
  * Script to generate a new Google OAuth refresh token
  * This will use the credentials from .env.local to generate a new token
+ * 
+ * IMPORTANT: Refresh tokens are LONG-LIVED and don't expire daily!
+ * - They can last indefinitely if used regularly
+ * - They may expire after 6 months of non-use
+ * - You only need to regenerate if:
+ *   1. You get an "invalid_grant" error
+ *   2. The token was revoked in Google Account settings
+ *   3. Your OAuth app credentials changed
+ * 
+ * Run this script ONCE to get a refresh token, then add it to .env.local
  */
 async function generateRefreshToken() {
     const {
