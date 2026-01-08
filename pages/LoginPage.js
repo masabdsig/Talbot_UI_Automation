@@ -157,34 +157,43 @@ class LoginPage {
     // Wait a bit for page to settle after login
     await this.page.waitForTimeout(1000);
 
-    // Check if we're already past MFA (on dashboard)
-    const currentUrl = this.page.url();
-    if (currentUrl.includes('/dashboard')) {
-      console.log('ℹ️ Already on dashboard - MFA not required or already handled');
-      return;
-    }
-
-    // Check for MFA skip button with longer timeout in CI
-    const mfaVisible = await this.mfaSkipButton.isVisible({ timeout: timeout }).catch(() => false);
-    if (mfaVisible) {
-      console.log('ACTION: MFA skip button found, clicking...');
-      await this.mfaSkipButton.click();
-
+    // Check for MFA skip button first - if visible, we need to click it regardless of URL
+    // Wait for button to be attached, visible, and enabled
+    try {
+      await this.mfaSkipButton.waitFor({ state: 'attached', timeout: 3000 });
+      await this.mfaSkipButton.waitFor({ state: 'visible', timeout: 3000 });
+      // Ensure button is enabled before clicking
+      await this.page.waitForTimeout(500); // Small wait to ensure button is fully ready
+      
+      console.log('ACTION: MFA skip button found and ready, clicking...');
+      await this.mfaSkipButton.click({ force: false });
+      
+      // Wait for modal to close
+      await this.page.waitForTimeout(1000);
+      
       // Wait for navigation to dashboard after clicking MFA skip
       try {
         await this.page.waitForURL(/\/dashboard/, { timeout: timeout });
         console.log('✔️ MFA skipped - navigated to dashboard');
       } catch (e) {
-        // If URL doesn't change, wait a bit more
+        // If URL doesn't change, wait a bit more and check if modal is gone
         await this.page.waitForTimeout(1000);
         const newUrl = this.page.url();
-        if (newUrl.includes('/dashboard')) {
+        const isModalGone = await this.mfaSkipButton.isVisible({ timeout: 1000 }).catch(() => false);
+        if (newUrl.includes('/dashboard') || !isModalGone) {
           console.log('✔️ MFA skipped - on dashboard');
         } else {
           console.log(`MFA skipped URL is: ${newUrl}`);
         }
       }
-    } else {
+    } catch (e) {
+      // Button not found or not visible - check if we're already on dashboard
+      const currentUrl = this.page.url();
+      if (currentUrl.includes('/dashboard')) {
+        console.log('ℹ️ Already on dashboard - MFA not required or already handled');
+        return;
+      }
+      
       console.log('ℹ️ MFA skip button not found - MFA may not be required');
       // If MFA button not found, check if we should wait for redirect
       if (currentUrl.includes('/login') || currentUrl.includes('/mfa')) {
@@ -192,7 +201,7 @@ class LoginPage {
         try {
           await this.page.waitForURL(/\/dashboard/, { timeout: timeout });
           console.log('✔️ Navigated to dashboard without MFA');
-        } catch (e) {
+        } catch (err) {
           console.log(`INFO: Still on ${currentUrl}, will verify in next step`);
         }
       }
@@ -360,12 +369,36 @@ class LoginPage {
   async navigateToDashboard() {
     console.log('Navigating to dashboard...');
     await this.page.goto('/dashboard');
+    
+    // Wait for page to settle after navigation
+    await this.page.waitForLoadState('domcontentloaded');
+    await this.page.waitForTimeout(1000); // Allow page to stabilize
 
-    // ✅ Skip MFA only if it appears
-    if (await this.skipMfaTitle.isVisible({ timeout: 3000 }).catch(() => false)) {
+    // ✅ Skip MFA only if it appears - wait for button to be ready
+    try {
+      // Wait for button to be attached and visible
+      await this.mfaSkipButton.waitFor({ state: 'visible', timeout: 3000 });
+      // Additional wait to ensure button is fully interactive
+      await this.page.waitForTimeout(500);
       console.log('➡️ MFA modal detected, skipping MFA...');
       await this.skipMfa();
-    } else {
+      
+      // Wait for MFA modal to disappear (check that button is no longer visible)
+      let modalClosed = false;
+      for (let i = 0; i < 10; i++) {
+        const isVisible = await this.mfaSkipButton.isVisible({ timeout: 500 }).catch(() => false);
+        if (!isVisible) {
+          modalClosed = true;
+          console.log('✔️ MFA modal closed');
+          break;
+        }
+        await this.page.waitForTimeout(500);
+      }
+      if (!modalClosed) {
+        console.log('⚠️ MFA modal may still be visible, continuing anyway...');
+      }
+    } catch (e) {
+      // Button not found or not visible - MFA may not be required
       console.log('ℹ️ MFA modal not shown, continuing...');
     }
 

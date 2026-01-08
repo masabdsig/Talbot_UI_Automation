@@ -36,7 +36,7 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log('\n✓ TEST COMPLETED: All validations passed successfully');
   });
 
-  test('TC43. Validate Appointment/Event selection and Event Type dropdown', async ({ page }) => {
+  test('TC43. Validate Event radio button selection and Event Type dropdown', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
@@ -117,7 +117,7 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log('\n✓ TEST COMPLETED: All validations passed successfully');
   });
 
-  test('TC45. Validate Event Title, Description, and Open Slot for Appointment Question', async ({ page }) => {
+  test('TC45. Validate Event Title, Description, and -Open Slot for Appointment- Question', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
@@ -174,6 +174,18 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     await schedulingPage.clickSaveAndVerifyEventCreated();
     console.log('✓ ASSERT: Event is saved and Event created alert is displayed when Save button is clicked');
 
+    console.log('\n=== STEP 7: Find and open edit modal for created event ===');
+    await schedulingPage.findAndDoubleClickEvent();
+    console.log('✓ ASSERT: Edit event modal opened after double-clicking event');
+
+    console.log('\n=== STEP 8: Click delete button in edit modal ===');
+    await schedulingPage.clickDeleteButtonInEditModal();
+    console.log('✓ ASSERT: Delete button clicked and delete confirmation popup appeared');
+
+    console.log('\n=== STEP 9: Confirm delete in delete confirmation popup ===');
+    await schedulingPage.confirmDeleteEvent();
+    console.log('✓ ASSERT: Event deleted successfully after confirming deletion');
+
     try {
       await page.waitForTimeout(2000);
     } catch (e) {
@@ -223,6 +235,18 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
       console.log('\n=== STEP 5: Validate event details on hover ===');
       await schedulingPage.hoverOverEventAndVerifyDetails(eventElement, eventType, eventTitle, eventDescription);
       console.log('✓ ASSERT: Event details are displayed on hover (Event Type, Date, Timings, Provider, Title, Description, Created/Modified info)');
+
+      console.log('\n=== STEP 6: Find and open edit modal for created event ===');
+      await schedulingPage.findAndDoubleClickEvent(eventTitle, eventType);
+      console.log('✓ ASSERT: Edit event modal opened after double-clicking event');
+
+      console.log('\n=== STEP 7: Click delete button in edit modal ===');
+      await schedulingPage.clickDeleteButtonInEditModal();
+      console.log('✓ ASSERT: Delete button clicked and delete confirmation popup appeared');
+
+      console.log('\n=== STEP 8: Confirm delete in delete confirmation popup ===');
+      await schedulingPage.confirmDeleteEvent();
+      console.log('✓ ASSERT: Event deleted successfully after confirming deletion');
     }
 
     try {

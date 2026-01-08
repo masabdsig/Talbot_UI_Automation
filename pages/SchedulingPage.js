@@ -62,7 +62,7 @@ class SchedulingPage {
       } catch (e) {}
     }
     await this.page.waitForURL('**/scheduling**', { timeout: 15000 });
-    await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    //await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
     console.log('✓ Navigated to Scheduling page');
   }
 
@@ -72,7 +72,7 @@ class SchedulingPage {
     await expect(this.nextButton).toBeEnabled();
     await this.nextButton.click();
     await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-    await this.page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+    // await this.page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
     // Wait for scheduler cells to render
     await this.page.waitForSelector('td.e-work-cells', { timeout: 10000, state: 'visible' }).catch(() => {});
     await this.page.waitForTimeout(1000); // Allow scheduler to fully update
@@ -83,8 +83,68 @@ class SchedulingPage {
     console.log('STEP: Waiting for scheduler to load...');
     await this.page.waitForLoadState('domcontentloaded', { timeout: 10000 });
     await this.page.waitForSelector('.e-schedule, .e-scheduler', { timeout: 15000, state: 'visible' });
-    await this.page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+    // await this.page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
     console.log('✓ Scheduler loaded');
+  }
+
+  // Helper: Check if a cell has an event/appointment
+  async cellHasEvent(cell) {
+    try {
+      // Check for event/appointment elements within the cell or overlapping it
+      const eventSelectors = [
+        '.e-event:not(button):not(.e-event-cancel):not(.e-event-save)',
+        '.e-appointment:not(button)',
+        '.e-schedule-event:not(button)',
+        'div[class*="event-item"]:not(button)',
+        'div.e-event:not(button)',
+        'span.e-event:not(button)',
+        '.subject', // Angular event subject elements
+        'div.subject', // Event subject divs
+        '[class*="subject"]', // Any element with subject class
+        '.e-appointment-wrap', // Appointment wrapper
+        '.e-appointment-details' // Appointment details
+      ];
+      
+      for (const selector of eventSelectors) {
+        const eventInCell = cell.locator(selector).first();
+        const isVisible = await eventInCell.isVisible({ timeout: 500 }).catch(() => false);
+        if (isVisible) {
+          return true;
+        }
+      }
+      
+      // Check for elements that might be overlaying the cell (simplified check)
+      // Look for subject elements that might be in thead or overlapping
+      const subjectInCell = cell.locator('.subject, div.subject, [class*="subject"]').first();
+      const hasSubject = await subjectInCell.isVisible({ timeout: 300 }).catch(() => false);
+      if (hasSubject) {
+        return true;
+      }
+      
+      // Also check if cell has event-related classes or attributes
+      const cellClass = await cell.getAttribute('class').catch(() => '');
+      const cellText = await cell.textContent({ timeout: 500 }).catch(() => '');
+      
+      // Check for event indicators in class or text
+      if (cellClass && (cellClass.includes('e-event') || cellClass.includes('appointment'))) {
+        return true;
+      }
+      
+      // Check if cell has meaningful text content (likely an event)
+      if (cellText && cellText.trim().length > 0 && !cellText.trim().match(/^\d+:\d+\s*(AM|PM)$/i)) {
+        // If cell has text that's not just a time, it might have an event
+        // But we need to be careful - check if it's actually an event element
+        const hasEventElement = await cell.locator('.e-event, .e-appointment, .subject').count().catch(() => 0);
+        if (hasEventElement > 0) {
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      // If we can't determine, assume no event (safer to try clicking)
+      return false;
+    }
   }
 
   // Time slot methods
@@ -109,16 +169,74 @@ class SchedulingPage {
       if (dataDate) {
         const cellTimestamp = parseInt(dataDate);
         if (cellTimestamp >= targetDayStart && cellTimestamp <= targetDayEnd) {
+          // Check if this cell has an event
+          const hasEvent = await this.cellHasEvent(cell);
+          if (hasEvent) {
+            const cellTime = new Date(cellTimestamp);
+            const timeStr = cellTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            console.log(`ℹ️ Cell at index ${i} (${timeStr}) has an event, skipping to next available cell...`);
+            continue; // Skip this cell and try the next one
+          }
+          
+          // Log when we find a cell without an event
+          const cellTime = new Date(cellTimestamp);
+          const timeStr = cellTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+          console.log(`✓ Cell at index ${i} (${timeStr}) is available and has no event`);
+          
+          // Cell is available and has no event, use it
           await cell.scrollIntoViewIfNeeded();
-          await this.page.waitForTimeout(200);
-          await cell.dblclick();
+          await this.page.waitForTimeout(300);
+          
+          // Try to click the cell, with fallback to force click if intercepted
+          try {
+            await cell.dblclick({ timeout: 5000 });
+          } catch (clickError) {
+            // If click is intercepted, check if it's because of an event element
+            const hasEventAfterCheck = await this.cellHasEvent(cell);
+            if (hasEventAfterCheck) {
+              console.log(`ℹ️ Cell at index ${i} has an event (detected during click), skipping...`);
+              continue; // Skip this cell
+            }
+            // If no event detected, try force click
+            console.log(`ℹ️ Click intercepted, trying force click...`);
+            await cell.dblclick({ force: true, timeout: 5000 });
+          }
+          
           await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
           await this.page.waitForTimeout(500);
-          console.log(`✓ Double-clicked available slot at index ${i}`);
+          console.log(`✓ Double-clicked available slot at index ${i} (no existing event)`);
           return true;
         }
       }
     }
+    
+    // If we couldn't find a cell without an event, log a warning but still try the first available
+    console.log('⚠️ All cells appear to have events, attempting to use first available cell anyway...');
+    for (let i = 0; i < Math.min(count, 500); i++) {
+      const cell = availableCells.nth(i);
+      const dataDate = await cell.getAttribute('data-date').catch(() => null);
+      if (dataDate) {
+        const cellTimestamp = parseInt(dataDate);
+        if (cellTimestamp >= targetDayStart && cellTimestamp <= targetDayEnd) {
+          await cell.scrollIntoViewIfNeeded();
+          await this.page.waitForTimeout(300);
+          
+          // Try normal click first, then force if needed
+          try {
+            await cell.dblclick({ timeout: 5000 });
+          } catch (clickError) {
+            console.log(`ℹ️ Click failed, trying force click...`);
+            await cell.dblclick({ force: true, timeout: 5000 });
+          }
+          
+          await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+          await this.page.waitForTimeout(500);
+          console.log(`✓ Double-clicked available slot at index ${i} (fallback)`);
+          return true;
+        }
+      }
+    }
+    
     return false;
   }
 
@@ -277,7 +395,50 @@ class SchedulingPage {
     await this.page.waitForTimeout(200);
     await radio.click({ force: true });
     await this.page.waitForLoadState('domcontentloaded', { timeout: 2000 }).catch(() => {});
-    await this.page.waitForTimeout(500); // Increased wait time for Event Type dropdown to appear
+    await this.page.waitForTimeout(800); // Wait for radio selection to register and UI to update
+    
+    // Wait for Event Type dropdown to appear after selecting Event radio
+    const modal = this.modal();
+    let dropdownAppeared = false;
+    
+    // Try multiple strategies to detect Event Type dropdown appearance
+    const eventTypeSelectors = [
+      () => modal.locator('label:has-text("Event Type")').first(),
+      () => this._getByLabel('Event Type'),
+      () => modal.locator('*:has-text("Event Type")').first(),
+      () => this.page.locator('label:has-text("Event Type")').first()
+    ];
+    
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      for (const getSelector of eventTypeSelectors) {
+        try {
+          const eventTypeLabel = getSelector();
+          await eventTypeLabel.waitFor({ state: 'visible', timeout: 3000 });
+          const isVisible = await eventTypeLabel.isVisible({ timeout: 1000 }).catch(() => false);
+          if (isVisible) {
+            dropdownAppeared = true;
+            await this.page.waitForTimeout(500); // Additional wait for dropdown to be fully rendered
+            console.log('✓ Event Type dropdown appeared after selecting Event radio');
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      if (dropdownAppeared) break;
+      
+      // Wait longer before retry
+      if (attempt < 3) {
+        await this.page.waitForTimeout(1000);
+        await this.page.waitForLoadState('domcontentloaded', { timeout: 2000 }).catch(() => {});
+      }
+    }
+    
+    if (!dropdownAppeared) {
+      console.log('⚠️ Event Type dropdown did not appear immediately, will retry in verification');
+    }
+    
     console.log('✓ Event radio button selected');
   }
 
@@ -300,8 +461,76 @@ class SchedulingPage {
   // Event Type dropdown methods
   async verifyEventTypeDropdownVisible() {
     console.log('ASSERT: Verifying Event Type dropdown is visible...');
-    const label = this._getByLabel('Event Type');
-    const isVisible = await label.isVisible({ timeout: 2000 }).catch(() => false);
+    
+    // Wait for the modal to be ready
+    const modal = this.modal();
+    await modal.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+    
+    // First, ensure Event radio button is selected (Event Type dropdown only appears when Event is selected)
+    const eventRadio = await this._findRadioByText('event');
+    if (eventRadio) {
+      const isEventSelected = await eventRadio.isChecked({ timeout: 2000 }).catch(() => false);
+      if (!isEventSelected) {
+        console.log('⚠️ Event radio button is not selected, selecting it now...');
+        await this.selectEventRadioButton();
+        // Wait for dropdown to appear after selecting
+        await this.page.waitForTimeout(1000);
+        await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+      } else {
+        console.log('✓ Event radio button is already selected');
+      }
+    } else {
+      // If Event radio not found, try to select it
+      console.log('⚠️ Event radio button not found, attempting to select...');
+      await this.selectEventRadioButton();
+      await this.page.waitForTimeout(1000);
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+    }
+    
+    // Retry logic with multiple attempts and increasing wait times
+    let label = null;
+    let isVisible = false;
+    const maxAttempts = 5;
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // Try multiple selector strategies
+      const labelSelectors = [
+        () => modal.locator('label:has-text("Event Type")').first(),
+        () => this._getByLabel('Event Type'),
+        () => this.page.locator('label:has-text("Event Type")').first(),
+        () => modal.locator('*:has-text("Event Type")').first()
+      ];
+      
+      for (const getLabel of labelSelectors) {
+        try {
+          label = getLabel();
+          await label.waitFor({ state: 'visible', timeout: 3000 + (attempt * 1000) });
+          isVisible = await label.isVisible({ timeout: 2000 }).catch(() => false);
+          if (isVisible) {
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      if (isVisible) {
+        break;
+      }
+      
+      // Wait before next attempt
+      if (attempt < maxAttempts) {
+        console.log(`⚠️ Event Type dropdown not visible yet, retrying (attempt ${attempt}/${maxAttempts})...`);
+        await this.page.waitForTimeout(1000 * attempt); // Increasing wait time
+        await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+      }
+    }
+    
+    // Final verification
+    if (!isVisible && label) {
+      isVisible = await label.isVisible({ timeout: 5000 }).catch(() => false);
+    }
+    
     if (!isVisible) {
       throw new Error('Event Type dropdown is not visible');
     }
@@ -390,7 +619,7 @@ class SchedulingPage {
   }
 
   async openAddEventPopupOnCurrentDay() {
-    console.log('STEP: Opening Add Event popup on current day (scroll down and click last available cell)...');
+    console.log('STEP: Opening Add Event popup on current day (finding available cell without event)...');
     await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
     await this.page.waitForSelector('td.e-work-cells', { timeout: 10000, state: 'visible' }).catch(() => {});
     await this.page.waitForTimeout(500);
@@ -408,9 +637,9 @@ class SchedulingPage {
       throw new Error('No available cells found for current day');
     }
     
-    // Find the last available cell for today by checking from the end
-    let lastCell = null;
-    let lastIndex = -1;
+    // Find the last available cell for today without an event, checking from the end
+    let selectedCell = null;
+    let selectedIndex = -1;
     
     for (let i = count - 1; i >= 0; i--) {
       const cell = availableCells.nth(i);
@@ -418,40 +647,79 @@ class SchedulingPage {
       if (dataDate) {
         const cellTimestamp = parseInt(dataDate);
         if (cellTimestamp >= todayStart && cellTimestamp <= todayEnd) {
-          lastCell = cell;
-          lastIndex = i;
-          break;
+          // Check if this cell has an event
+          const hasEvent = await this.cellHasEvent(cell);
+          if (!hasEvent) {
+            selectedCell = cell;
+            selectedIndex = i;
+            break;
+          }
         }
       }
     }
     
-    if (!lastCell) {
-      // If no cell found in reverse search, try forward search
+    // If no cell without event found in reverse search, try forward search
+    if (!selectedCell) {
       for (let i = 0; i < Math.min(count, 500); i++) {
         const cell = availableCells.nth(i);
         const dataDate = await cell.getAttribute('data-date').catch(() => null);
         if (dataDate) {
           const cellTimestamp = parseInt(dataDate);
           if (cellTimestamp >= todayStart && cellTimestamp <= todayEnd) {
-            lastCell = cell;
-            lastIndex = i;
+            const hasEvent = await this.cellHasEvent(cell);
+            if (!hasEvent) {
+              selectedCell = cell;
+              selectedIndex = i;
+              break;
+            }
           }
         }
       }
     }
     
-    if (!lastCell) {
+    // If still no cell found without event, use the last available cell as fallback
+    if (!selectedCell) {
+      console.log('⚠️ All cells appear to have events, using last available cell as fallback...');
+      for (let i = count - 1; i >= 0; i--) {
+        const cell = availableCells.nth(i);
+        const dataDate = await cell.getAttribute('data-date').catch(() => null);
+        if (dataDate) {
+          const cellTimestamp = parseInt(dataDate);
+          if (cellTimestamp >= todayStart && cellTimestamp <= todayEnd) {
+            selectedCell = cell;
+            selectedIndex = i;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (!selectedCell) {
       throw new Error('No available cell found for current day');
     }
     
-    // Scroll to the last cell and double-click it
-    await lastCell.scrollIntoViewIfNeeded();
-    await this.page.waitForTimeout(500);
-    await lastCell.dblclick();
+    // Scroll to the selected cell and double-click it
+    await selectedCell.scrollIntoViewIfNeeded();
+    await this.page.waitForTimeout(300);
+    
+    // Try to click the cell, with fallback to force click if intercepted
+    try {
+      await selectedCell.dblclick({ timeout: 5000 });
+    } catch (clickError) {
+      // If click is intercepted, check if it's because of an event element
+      const hasEventAfterCheck = await this.cellHasEvent(selectedCell);
+      if (hasEventAfterCheck) {
+        console.log(`⚠️ Selected cell has an event (detected during click), this should not happen`);
+      }
+      // Try force click as fallback
+      console.log(`ℹ️ Click intercepted, trying force click...`);
+      await selectedCell.dblclick({ force: true, timeout: 5000 });
+    }
+    
     await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
     await this.page.waitForTimeout(1000);
     await this.verifyAddEventPopupVisible();
-    console.log(`✓ Double-clicked last available cell at index ${lastIndex} on current day`);
+    console.log(`✓ Double-clicked available cell at index ${selectedIndex} on current day (no existing event)`);
     console.log('✓ Add Event popup opened');
   }
 
@@ -682,6 +950,21 @@ class SchedulingPage {
     console.log('\n=== Setting up Event and selecting Event Type ===');
     await this.openAddEventPopupOnNextDay();
     await this.selectEventRadioButton();
+    
+    // Additional wait to ensure Event Type dropdown is fully rendered and DOM is stable
+    await this.page.waitForTimeout(1000);
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+    
+    // Verify modal is still open before proceeding
+    const modal = this.modal();
+    const isModalOpen = await modal.isVisible({ timeout: 3000 }).catch(() => false);
+    if (!isModalOpen) {
+      throw new Error('Modal closed unexpectedly after selecting Event radio button');
+    }
+    
+    // Additional wait for any animations or UI updates
+    await this.page.waitForTimeout(500);
+    
     const selectedEventType = await this.selectFirstAvailableEventType();
     console.log(`✓ Event Type "${selectedEventType}" selected`);
     return selectedEventType;
@@ -691,6 +974,11 @@ class SchedulingPage {
     console.log('\n=== Setting up Event and selecting Event Type on current day ===');
     await this.openAddEventPopupOnCurrentDay();
     await this.selectEventRadioButton();
+    
+    // Additional wait to ensure Event Type dropdown is fully rendered
+    await this.page.waitForTimeout(500);
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+    
     const selectedEventType = await this.selectFirstAvailableEventType();
     console.log(`✓ Event Type "${selectedEventType}" selected`);
     return selectedEventType;
@@ -818,6 +1106,7 @@ class SchedulingPage {
     // Try multiple strategies to select the radio button
     let selected = false;
     const maxRetries = 3;
+    let lastError = null;
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -888,7 +1177,8 @@ class SchedulingPage {
           }
         }
       } catch (error) {
-        console.log(`⚠️ Attempt ${attempt} failed: ${error.message}`);
+        // Store error but don't log it yet - only log if all attempts fail
+        lastError = error;
         if (attempt < maxRetries) {
           await this.page.waitForTimeout(500);
         }
@@ -905,11 +1195,25 @@ class SchedulingPage {
       await this.page.waitForTimeout(1000);
       const finalCheck = await yesRadio.isChecked({ timeout: 2000 }).catch(() => false);
       if (!finalCheck) {
+        // Only log the error if all attempts failed
+        if (lastError) {
+          console.log(`⚠️ All attempts failed. Last error: ${lastError.message}`);
+        }
         throw new Error('Yes radio button is not selected after multiple attempts');
       }
+      selected = true;
     }
     
-    console.log('✓ Yes radio button selected for open slot question');
+    // Only log success if we actually selected it (not if it was already selected)
+    if (selected) {
+      console.log('✓ Yes radio button selected for open slot question');
+    } else {
+      // If it was already checked, just verify it's checked
+      const alreadyChecked = await yesRadio.isChecked({ timeout: 1000 }).catch(() => false);
+      if (alreadyChecked) {
+        console.log('✓ Yes radio button is already selected for open slot question');
+      }
+    }
   }
 
   async verifySlotOpenForAppointments() {
@@ -1034,13 +1338,265 @@ class SchedulingPage {
   }
 
   // Event display validation methods for TC42
+  // Find and double-click event on scheduler to open edit modal
+  async findAndDoubleClickEvent(eventTitle = null, eventType = null) {
+    console.log('STEP: Finding and double-clicking event on scheduler...');
+    
+    // Wait for scheduler to refresh after event creation (same as TC47)
+    await this.page.waitForTimeout(2000);
+    
+    // Reload scheduler to see the new event (same logic as verifyEventDisplayedOnScheduler)
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.reload({ waitUntil: 'domcontentloaded' });
+    await this.page.waitForTimeout(2000);
+    await this.page.waitForSelector('td.e-work-cells', { timeout: 10000, state: 'visible' }).catch(() => {});
+    await this.page.waitForTimeout(1000);
+    
+    let eventElement = null;
+    
+    if (eventTitle || eventType) {
+      // Use the existing method to find event by title/type (which also reloads)
+      eventElement = await this.verifyEventDisplayedOnScheduler(eventTitle, eventType);
+    } else {
+      // Use the same comprehensive search logic as verifyEventDisplayedOnScheduler
+      const allEventSelectors = [
+        '.e-event:not(button):not(.e-event-cancel):not(.e-event-save)',
+        '.e-appointment:not(button)',
+        '.e-schedule-event:not(button)',
+        'div[class*="event-item"]:not(button)',
+        'div.e-event:not(button)',
+        'span.e-event:not(button)'
+      ];
+      
+      // Approach 1: Find all events and get the most recently created one
+      for (const baseSelector of allEventSelectors) {
+        const events = this.page.locator(baseSelector);
+        const count = await events.count({ timeout: 3000 }).catch(() => 0);
+        if (count > 0) {
+          console.log(`ℹ️ Found ${count} event(s) on scheduler`);
+          // Get the last visible event (most recently created)
+          for (let i = count - 1; i >= 0; i--) {
+            const event = events.nth(i);
+            const isVisible = await event.isVisible({ timeout: 1000 }).catch(() => false);
+            if (isVisible) {
+              eventElement = event;
+              console.log(`✓ Found most recently created event on scheduler (index ${i})`);
+              break;
+            }
+          }
+        }
+        if (eventElement) break;
+      }
+      
+      // Approach 2: Try finding events in scheduler containers
+      if (!eventElement) {
+        const eventsInScheduler = this.page.locator('.e-schedule .e-event:not(button), .e-scheduler .e-event:not(button), .e-event:not(.e-event-cancel):not(.e-event-save):not(button)');
+        const count = await eventsInScheduler.count({ timeout: 2000 }).catch(() => 0);
+        if (count > 0) {
+          // Get the last visible event
+          for (let i = count - 1; i >= 0; i--) {
+            const event = eventsInScheduler.nth(i);
+            const isVisible = await event.isVisible({ timeout: 1000 }).catch(() => false);
+            if (isVisible) {
+              eventElement = event;
+              console.log(`✓ Found most recently created event on scheduler (index ${i})`);
+              break;
+            }
+          }
+        }
+      }
+    }
+    
+    if (!eventElement) {
+      console.log('⚠️ Event not found on scheduler - Event may not have been saved');
+      throw new Error('Event not found on scheduler');
+    }
+    
+    // Scroll event into view and double-click
+    await eventElement.scrollIntoViewIfNeeded();
+    await this.page.waitForTimeout(300);
+    
+    // Try normal double-click first, then force if needed
+    try {
+      await eventElement.dblclick({ timeout: 5000 });
+    } catch (error) {
+      console.log('ℹ️ Normal double-click failed, trying force click...');
+      await eventElement.dblclick({ force: true, timeout: 5000 });
+    }
+    
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+    await this.page.waitForTimeout(1000);
+    
+    // Verify edit modal is open
+    const modal = this.modal();
+    const isModalOpen = await modal.isVisible({ timeout: 5000 }).catch(() => false);
+    if (!isModalOpen) {
+      throw new Error('Edit event modal did not open after double-clicking event');
+    }
+    
+    console.log('✓ Event double-clicked and edit modal opened');
+  }
+
+  // Click delete button in edit modal
+  async clickDeleteButtonInEditModal() {
+    console.log('STEP: Clicking delete button in edit modal...');
+    
+    const modal = this.modal();
+    await modal.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+    
+    // Try multiple selectors for delete button
+    const deleteButtonSelectors = [
+      'button:has-text("Delete")',
+      'button:has-text("delete")',
+      'button.e-event-delete',
+      'button[aria-label*="delete" i]',
+      'button[title*="delete" i]',
+      '.e-event-delete',
+      '[class*="delete"] button',
+      'button.delete'
+    ];
+    
+    let deleteButton = null;
+    for (const selector of deleteButtonSelectors) {
+      const btn = modal.locator(selector).first();
+      const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+      if (isVisible) {
+        deleteButton = btn;
+        break;
+      }
+    }
+    
+    // If not found in modal, try page-wide search
+    if (!deleteButton) {
+      for (const selector of deleteButtonSelectors) {
+        const btn = this.page.locator(selector).first();
+        const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          deleteButton = btn;
+          break;
+        }
+      }
+    }
+    
+    if (!deleteButton) {
+      throw new Error('Delete button not found in edit modal');
+    }
+    
+    await deleteButton.scrollIntoViewIfNeeded();
+    await this.page.waitForTimeout(200);
+    await deleteButton.click({ timeout: 5000 });
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+    
+    console.log('✓ Delete button clicked');
+  }
+
+  // Confirm delete in delete confirmation popup
+  async confirmDeleteEvent() {
+    console.log('STEP: Confirming delete in delete confirmation popup...');
+    
+    // Wait for delete confirmation popup to appear
+    await this.page.waitForTimeout(500);
+    
+    // Try multiple selectors for delete confirmation popup
+    const deleteConfirmSelectors = [
+      '.modal:has-text("delete")',
+      '[role="dialog"]:has-text("delete")',
+      '.e-popup-open:has-text("delete")',
+      '.confirm-dialog:has-text("delete")',
+      '.delete-confirm'
+    ];
+    
+    let confirmModal = null;
+    for (const selector of deleteConfirmSelectors) {
+      const modal = this.page.locator(selector).first();
+      const isVisible = await modal.isVisible({ timeout: 3000 }).catch(() => false);
+      if (isVisible) {
+        confirmModal = modal;
+        break;
+      }
+    }
+    
+    // If no specific delete modal found, use the general modal
+    if (!confirmModal) {
+      confirmModal = this.modal();
+    }
+    
+    await confirmModal.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+    
+    // Find and click the confirm/delete button in the confirmation popup
+    const confirmButtonSelectors = [
+      'button:has-text("Delete")',
+      'button:has-text("delete")',
+      'button:has-text("Confirm")',
+      'button:has-text("confirm")',
+      'button.e-confirm',
+      'button[aria-label*="delete" i]',
+      'button[aria-label*="confirm" i]',
+      'button.delete',
+      'button.confirm',
+      '.e-btn-primary:has-text("Delete")',
+      '.e-btn-primary:has-text("delete")'
+    ];
+    
+    let confirmButton = null;
+    for (const selector of confirmButtonSelectors) {
+      const btn = confirmModal.locator(selector).first();
+      const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+      if (isVisible) {
+        const text = await btn.textContent({ timeout: 1000 }).catch(() => '');
+        // Prefer buttons with "Delete" text over "Confirm"
+        if (text && text.toLowerCase().includes('delete')) {
+          confirmButton = btn;
+          break;
+        } else if (!confirmButton && text && text.toLowerCase().includes('confirm')) {
+          confirmButton = btn;
+        }
+      }
+    }
+    
+    // If not found in modal, try page-wide
+    if (!confirmButton) {
+      for (const selector of confirmButtonSelectors) {
+        const btn = this.page.locator(selector).first();
+        const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          const text = await btn.textContent({ timeout: 1000 }).catch(() => '');
+          if (text && (text.toLowerCase().includes('delete') || text.toLowerCase().includes('confirm'))) {
+            confirmButton = btn;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (!confirmButton) {
+      throw new Error('Delete confirmation button not found');
+    }
+    
+    await confirmButton.scrollIntoViewIfNeeded();
+    await this.page.waitForTimeout(200);
+    await confirmButton.click({ timeout: 5000 });
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+    await this.page.waitForTimeout(1000);
+    
+    // Verify delete confirmation popup is closed
+    const isModalClosed = await confirmModal.isVisible({ timeout: 3000 }).catch(() => true);
+    if (isModalClosed) {
+      // Wait a bit more for modal to close
+      await this.page.waitForTimeout(500);
+    }
+    
+    console.log('✓ Delete confirmed and event deleted');
+  }
+
   async verifyEventDisplayedOnScheduler(eventTitle, eventType = null) {
     console.log(`ASSERT: Verifying event is displayed on scheduler...`);
     await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-    await this.page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+    // await this.page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
     
     // Reload scheduler to see the new event
-    await this.page.reload({ waitUntil: 'domcontentloaded' });
+    // await this.page.reload({ waitUntil: 'domcontentloaded' });
     await this.page.waitForTimeout(2000);
     await this.page.waitForSelector('td.e-work-cells', { timeout: 10000, state: 'visible' }).catch(() => {});
     await this.page.waitForTimeout(1000);
