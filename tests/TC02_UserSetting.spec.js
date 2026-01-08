@@ -30,7 +30,7 @@ if (await dashboard.enable2FATitle.isVisible()) {
 /* -----------------------------------------------------
    TEST 1 — Validate User Settings UI
 ----------------------------------------------------- */
-test.only('TC05 Validate feilds of Digital Signature Section ', async ({ page }) => {
+test('TC05 Validate feilds of Digital Signature Section ', async ({ page }) => {
   const dashboard = new DashboardLocators(page);
 
   console.log('➡️ Clicking Avatar icon...');
