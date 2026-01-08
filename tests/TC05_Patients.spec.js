@@ -33,22 +33,30 @@ test.describe('Patient Module - Add Patient Flow', () => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
-    // Step 1: Validate modal is displayed when Add Patient button is clicked
+    // Step 1: Validate on the Patient Listing Section, by clicking on the Add Patient button the Add New Patient popup is displayed
     console.log("STEP 1: Navigating to Patients tab...");
     await patient.navigateToPatientsTab(loginPage);
     await expect(patient.addPatientBtn).toBeVisible();
     
     console.log("STEP 1: Clicking Add Patient button...");
     await patient.openAddPatientModal();
-    await patient.verifyModalDisplayed();
+    
+    console.log("ASSERT: Validating Add New Patient popup is displayed...");
+    await expect(patient.modalTitle).toBeVisible({ timeout: 10000 });
+    console.log("ASSERT: Add New Patient popup is displayed successfully");
 
-    // Step 2: Validate close button is visible
+    // Step 2: Validate on the Add New Patient popup, a cross mark icon is displayed on the header
     console.log("STEP 2: Validating cross mark icon is displayed on the header...");
-    await patient.verifyModalCloseButton();
+    await expect(patient.modalCloseButton).toBeVisible({ timeout: 10000 });
+    console.log("ASSERT: Cross mark icon is displayed on the header");
 
-    // Step 3: Validate modal closes when close button is clicked
+    // Step 3: Validate on the Add New Patient popup, by clicking on the cross mark icon the Add New Patient popup should close
     console.log("STEP 3: Clicking on the cross mark icon...");
-    await patient.closeModalAndVerify();
+    await patient.modalCloseButton.click();
+    
+    console.log("ASSERT: Validating Add New Patient popup is closed...");
+    await expect(patient.modalTitle).not.toBeVisible({ timeout: 5000 });
+    console.log("ASSERT: Add New Patient popup is closed successfully");
   });
 
   test('TC22. Validate all fields, controls, and functionality in Add New Patient popup', async ({ page }) => {
@@ -133,7 +141,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     console.log("ASSERT: All fields validated successfully");
   });
 
-  test.only('TC23. Add new patient and validate checkboxes, Save/Cancel buttons and Patient Demographics page', async ({ page }) => {
+  test('TC23. Add new patient and validate checkboxes, Save/Cancel buttons and Patient Demographics page', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
   
@@ -283,7 +291,7 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.verifyInsurancePolicySuccessToast();
   });
 
-  test('TC26. Validate Card View and Table View functionality', async ({ page }) => {
+  test.only('TC26. Validate Card View and Table View functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 

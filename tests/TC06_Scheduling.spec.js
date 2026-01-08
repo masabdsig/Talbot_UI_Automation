@@ -6,7 +6,7 @@ test.use({ storageState: 'authState.json' });
 
 test.describe('Scheduling Module - Add Appointment/Event', () => {
 
-  test('TC41. Validate Add Event popup functionality', async ({ page }) => {
+  test('TC42. Validate Add Event popup functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
@@ -36,7 +36,7 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log('\n✓ TEST COMPLETED: All validations passed successfully');
   });
 
-  test('TC42. Validate Appointment/Event selection and Event Type dropdown', async ({ page }) => {
+  test('TC43. Validate Appointment/Event selection and Event Type dropdown', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
@@ -89,7 +89,7 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log('\n✓ TEST COMPLETED: All validations passed successfully');
   });
 
-  test('TC43. Validate Event Type, Start Time, Duration, End Time, and Edit Time controls', async ({ page }) => {
+  test('TC44. Validate Event Type, Start Time, Duration, End Time, and Edit Time controls', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
@@ -117,7 +117,7 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log('\n✓ TEST COMPLETED: All validations passed successfully');
   });
 
-  test('TC44. Validate Event Title, Description, and Open Slot for Appointment Question', async ({ page }) => {
+  test('TC45. Validate Event Title, Description, and Open Slot for Appointment Question', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
@@ -142,7 +142,7 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log('\n✓ TEST COMPLETED: All validations passed successfully');
   });
 
-  test('TC45. Validate Yes Radio Selection, Save and Cancel buttons functionality', async ({ page }) => {
+  test('TC46. Validate Yes Radio Selection, Save and Cancel buttons functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
@@ -183,7 +183,7 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log('\n✓ TEST COMPLETED: All validations passed successfully');
   });
 
-  test('TC46. Validate Created Event Display on Scheduler', async ({ page }) => {
+  test('TC47. Validate Created Event Display on Scheduler', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
@@ -234,7 +234,7 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log('\n✓ TEST COMPLETED: All validations passed successfully');
   });
 
-  test('SCH-001. Appointments only within provider availability windows', async ({ page }) => {
+  test('TC48. Appointments only within provider availability windows', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
@@ -248,7 +248,7 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log('\n✓ TEST COMPLETED: Availability window validation completed');
   });
 
-  test('SCH-002. Appointments blocked during schedule blocks', async ({ page }) => {
+  test('TC49. Appointments blocked during schedule blocks', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
@@ -274,7 +274,7 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log('\n✓ TEST COMPLETED: Schedule block validation completed');
   });
 
-  test('SCH-003. Provider must be active at location for appointment location', async ({ page }) => {
+  test('TC50. Provider must be active at location for appointment location', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
@@ -284,7 +284,7 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log('\n✓ TEST COMPLETED: Provider location validation completed');
   });
 
-  test('SCH-004. Location must be active for appointment date', async ({ page }) => {
+  test('TC51. Location must be active for appointment date', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 

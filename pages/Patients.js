@@ -9,10 +9,8 @@ class PatientPage {
     this.patientsTab = page.locator('button.header-btn:has-text("Patients")');
 
     // Modal helpers - define first as it's used by other locators
-    // Updated to handle both "Add New Patient" and edit patient modals
-    // Use the visible/show modal first, then fall back to specific titles
-    this._modalScope = '.modal.show:has(.modal-title), .modal[style*="display"]:has(.modal-title), .modal:has(.modal-title:has-text("Add New Patient")), .modal:has(.modal-title:has-text("Edit"))';
-    this.modalTitle = page.locator('.modal-title:has-text("Add New Patient"), .modal-title:has-text("Edit"), .modal.show .modal-title, .modal[style*="display"] .modal-title');
+    this._modalScope = '.modal:has(.modal-title:has-text("Add New Patient"))';
+    this.modalTitle = page.locator('.modal-title:has-text("Add New Patient")');
     this.modalCloseButton = page.locator(`${this._modalScope} .modal-header i.fa.fa-times.fa-lg`).first();
 
     // Buttons
@@ -22,13 +20,11 @@ class PatientPage {
 
     // Form inputs - using helper, scoped to modal
     this._getInputByLabel = (label) => page.locator(`${this._modalScope} label:has-text("${label}") + input`).first();
-    // Patient Id - use direct selectors to avoid modal container match
-    this.patientId = page.locator('label:has-text("Patient Id") + input, input[type="text"][disabled][placeholder=""].e-input').first();
+    this.patientId = page.locator(`${this._modalScope} label:has-text("Patient Id") + input, ${this._modalScope} input[id*="patientId"], ${this._modalScope} input[id*="patient_id"]`).first();
     this.billingId = page.locator(`${this._modalScope} label:has-text("Billing Id") + input, ${this._modalScope} input[id*="billingId"], ${this._modalScope} input[id*="billing_id"]`).first();
     this.firstName = this._getInputByLabel('First Name');
     this.lastName = this._getInputByLabel('Last Name');
-    // DOB input - Syncfusion datepicker, need to find the actual input inside
-    this.dobInput = page.locator(`${this._modalScope} #patient_dob_datepicker_input, ${this._modalScope} ejs-datepicker#patient_dob_datepicker_input input, ${this._modalScope} input[id*="patient_dob"][id*="datepicker"]`).first();
+    this.dobInput = page.locator(`${this._modalScope} #patient_dob_datepicker_input`).first();
     this.address = this._getInputByLabel('Address');
     this.zipcode = this._getInputByLabel('Zip Code');
     this.city = this._getInputByLabel('City');
@@ -37,9 +33,6 @@ class PatientPage {
 
     // Dropdowns (stable, label-based) - using helper, scoped to modal
     this._getDropdownByLabel = (label) => page.locator(`${this._modalScope} label:has-text("${label}")`).first().locator('xpath=../..//div[contains(@class,"e-control-wrapper")]');
-    
-    // Helper for Insurance Policy modal dropdowns (scoped to patient-add-policy)
-    this._getInsuranceDropdownByLabel = (label) => page.locator(`patient-add-policy label:has-text("${label}")`).first().locator('xpath=../..//div[contains(@class,"e-control-wrapper")]');
     this.genderDropdown = this._getDropdownByLabel('Gender');
     this.stateDropdown = this._getDropdownByLabel('State');
     this.preferredContactDropdown = this._getDropdownByLabel('Preferred Contact');
@@ -103,14 +96,7 @@ class PatientPage {
     this.phoneAssessmentNoLabel = page.locator(`${this._modalScope} ejs-radiobutton[label="No"] label`).first();
 
     // Client Availability (appears when Add to Cancellation List is checked)
-    this.getWeekdayCheckbox = (day) => {
-      // Try to find checkbox by label text first (more reliable)
-      const labelBased = page.locator(`label:has-text("${day}")`).first().locator('xpath=..//input[@type="checkbox"]').first();
-      // Fallback: try by ID
-      const idBased = page.locator(`input[type="checkbox"][id*="${day.toLowerCase()}"]`).first();
-      // Return the first one that's visible
-      return page.locator(`label:has-text("${day}")`).first().locator('xpath=..//input[@type="checkbox"]').first();
-    };
+    this.getWeekdayCheckbox = (day) => page.locator(`${this._modalScope} label:has-text("${day}") input[type="checkbox"], ${this._modalScope} input[type="checkbox"][id*="${day.toLowerCase()}"]`).first();
     this.getTimeControls = (day) => page.locator(`${this._modalScope} label:has-text("${day}")`).locator('xpath=following::input[contains(@id, "time") or contains(@id, "Time") or contains(@placeholder, "time") or contains(@placeholder, "Time") or contains(@class, "time")]');
     this.anyTimeInput = page.locator(`${this._modalScope} input[id*="time"], ${this._modalScope} input[placeholder*="time"]`).first();
     this.timeOptions = page.locator('div[id$="_popup"]:visible li[role="option"]');
@@ -324,20 +310,20 @@ class PatientPage {
     // Company Type radio buttons - click the label for better reliability
     this.companyTypeRadio = (type) => page.locator(`ejs-radiobutton:has(span.e-label:has-text("${type}")) label`);
 
-    // Policy Number input - Syncfusion textbox component, need to find the actual input inside
-    this.policyNumberInput = page.locator('#policy_number input, ejs-textbox#policy_number input, #policy_number.e-textbox input');
+    // Policy Number input - Syncfusion ejs-textbox, need to target the inner input
+    this.policyNumberInput = page.locator('ejs-textbox#policy_number input.e-input, #policy_number input.e-input, ejs-textbox#policy_number input[type="text"]');
 
-    // Insurance Policy dropdowns and inputs - use Insurance Policy modal scope
+    // Insurance Policy dropdowns and inputs
+    // Helper to get dropdowns scoped to Insurance Policy modal
+    this._getInsuranceDropdownByLabel = (label) => page.locator(`patient-add-policy label:has-text("${label}")`).first().locator('xpath=../..//div[contains(@class,"e-control-wrapper")]');
     this.levelDropdown = this._getInsuranceDropdownByLabel('Level *');
     this.ptRelationDropdown = this._getInsuranceDropdownByLabel('Pt Relation to Policy Holder *');
     this.sexDropdown = this._getInsuranceDropdownByLabel('Sex *');
     this.payorIdDropdown = this._getInsuranceDropdownByLabel('Payor Id');
     this.companyNameDropdown = this._getInsuranceDropdownByLabel('Company Name');
-    // Policy Holder inputs - Syncfusion textbox components, need to find the actual input inside
-    this.policyHolderFirstName = page.locator('#firstName input, ejs-textbox#firstName input');
-    this.policyHolderLastName = page.locator('#lastName input, ejs-textbox#lastName input');
-    // Policy Holder DOB - Syncfusion datepicker, need to find the actual input
-    this.policyHolderDobInput = page.locator('#dob_datepicker_input, ejs-datepicker#dob_datepicker_input input, input[id*="dob"][id*="datepicker"]');
+    this.policyHolderFirstName = page.locator('#firstName');
+    this.policyHolderLastName = page.locator('#lastName');
+    this.policyHolderDobInput = page.locator('#dob_datepicker_input');
     this.saveInsurancePolicyBtn = page.locator('patient-add-policy button.btn-primary:has-text("Save")');
 
     // Confirmation Dialog
@@ -545,10 +531,32 @@ class PatientPage {
 
   async openAddPatientModal() {
     console.log('ACTION: Clicking Add Patient button...');
-    await this.addPatientBtn.click({ timeout: 10000 }).catch(() => {
+    
+    // Ensure Add Patient button is visible and enabled
+    await expect(this.addPatientBtn).toBeVisible({ timeout: 10000 });
+    await this.addPatientBtn.waitFor({ state: 'visible', timeout: 10000 });
+    
+    // Wait for any loaders to disappear
+    const loaderVisible = await this.page.locator('.loader-wrapper').isVisible({ timeout: 2000 }).catch(() => false);
+    if (loaderVisible) {
+      await this.page.waitForSelector('.loader-wrapper', { state: 'hidden', timeout: 10000 }).catch(() => {});
+    }
+    
+    // Click the button
+    try {
+      await this.addPatientBtn.click({ timeout: 10000 });
+    } catch (error) {
       // Fallback: try force click
-      this.addPatientBtn.click({ force: true, timeout: 10000 });
-    });
+      console.log('INFO: Normal click failed, trying force click...');
+      await this.addPatientBtn.click({ force: true, timeout: 10000 });
+    }
+    
+    // Wait for modal to appear
+    await this.page.waitForTimeout(2000);
+    
+    // Wait for modal title to be visible
+    await expect(this.modalTitle).toBeVisible({ timeout: 15000 });
+    await this.page.waitForTimeout(1000);
   }
 
   async validateFormFields() {
@@ -851,79 +859,23 @@ class PatientPage {
 
   async fillMandatoryFields(data) {
     console.log(`ACTION: Filling first name: ${data.firstName}`);
-    const firstNameInput = await this._getInputElementByLabel('First Name');
-    await firstNameInput.fill(data.firstName);
+    await this.firstName.fill(data.firstName);
 
     console.log(`ACTION: Filling last name: ${data.lastName}`);
-    const lastNameInput = await this._getInputElementByLabel('Last Name');
-    await lastNameInput.fill(data.lastName);
+    await this.lastName.fill(data.lastName);
 
     console.log(`ACTION: Filling DOB: ${data.dob}`);
-    // Find DOB input using multiple strategies
-    const dobSelectors = [
-      '#patient_dob_datepicker_input',
-      'ejs-datepicker#patient_dob_datepicker_input input',
-      'input[id*="patient_dob"][id*="datepicker"]',
-      'ejs-datepicker input[id*="dob"]'
-    ];
-    
-    let dobInputElement = null;
-    for (const selector of dobSelectors) {
-      try {
-        const candidate = this.page.locator(selector).first();
-        await expect(candidate).toBeVisible({ timeout: 2000 });
-        dobInputElement = candidate;
-        break;
-      } catch (e) {
-        continue;
-      }
-    }
-    
-    if (!dobInputElement) {
-      throw new Error('DOB datepicker input not found in Add New Patient modal');
-    }
-    
-    await dobInputElement.fill(data.dob);
+    await this.dobInput.fill(data.dob);
 
     await this.page.waitForTimeout(2000);
     // GENDER SELECTION
     console.log(`ACTION: Selecting gender: ${data.gender}`);
-    
-    // Wait for Gender label to appear first
-    await this.page.waitForSelector('label:has-text("Gender")', { state: 'visible', timeout: 10000 });
-    await this.page.waitForTimeout(500);
-    
-    // Try to find gender dropdown with flexible selectors
-    let genderDropdownElement = null;
-    const genderSelectors = [
-      this.page.locator('label:has-text("Gender")').first().locator('xpath=../..//div[contains(@class,"e-control-wrapper")]'),
-      this.genderDropdown
-    ];
-    
-    for (const selector of genderSelectors) {
-      try {
-        await expect(selector).toBeVisible({ timeout: 3000 });
-        genderDropdownElement = selector;
-        break;
-      } catch (e) {
-        continue;
-      }
-    }
-    
-    if (!genderDropdownElement) {
-      throw new Error('Gender dropdown not found in Add New Patient modal');
-    }
-    
-    // Ensure the input is enabled before selecting
-    const genderInput = genderDropdownElement.locator('input[role="combobox"]').first();
-    await expect(genderInput).toBeEnabled({ timeout: 5000 });
-    
     try {
-      await this._selectDropdownWithFallback(genderDropdownElement, data.gender, 'Gender');
+      await this._selectDropdownWithFallback(this.genderDropdown, data.gender, 'Gender');
     } catch (error) {
       console.log(`WARNING: Error selecting gender using fallback method: ${error.message}`);
       // Fallback to direct selection
-      await genderDropdownElement.click({ force: true });
+      await this.genderDropdown.click({ force: true });
       await this.page.waitForTimeout(1500); // Wait for dropdown to open
       
       // Select the option directly
@@ -931,7 +883,7 @@ class PatientPage {
       await genderOption.click({ timeout: 5000 }).catch(async () => {
         // Fallback: Try clicking dropdown again and then select
         console.log('INFO: Gender option not found, clicking dropdown again...');
-        await genderDropdownElement.click({ force: true });
+        await this.genderDropdown.click({ force: true });
         await this.page.waitForTimeout(1500);
         await genderOption.click({ timeout: 5000 });
       });
@@ -941,12 +893,13 @@ class PatientPage {
     await this.page.waitForTimeout(500);
 
     // Verify the gender option was selected
+    const genderInput = this.genderDropdown.locator('input[role="combobox"], input.e-input').first();
     const selectedGender = await genderInput.inputValue().catch(() => '');
     if (selectedGender && selectedGender.trim() === data.gender) {
       console.log(`ASSERT: Gender "${data.gender}" is selected successfully`);
     } else {
       // Try alternative method to get selected value
-      const genderText = await genderDropdownElement.textContent().catch(() => '');
+      const genderText = await this.genderDropdown.textContent().catch(() => '');
       if (genderText && genderText.trim().includes(data.gender)) {
         console.log(`ASSERT: Gender "${data.gender}" is selected successfully (verified via text content)`);
       } else {
@@ -956,13 +909,11 @@ class PatientPage {
 
     // ADDRESS
     console.log(`ACTION: Filling address: ${data.address}`);
-    const addressInput = await this._getInputElementByLabel('Address');
-    await addressInput.fill(data.address);
+    await this.address.fill(data.address);
 
     // ZIPCODE (triggers auto-fill)
     console.log(`ACTION: Filling zipcode: ${data.zipcode}`);
-    const zipcodeInput = await this._getInputElementByLabel('Zip Code');
-    await zipcodeInput.fill(data.zipcode);
+    await this.zipcode.fill(data.zipcode);
 
     // let auto-populate happen
     await this.page.waitForTimeout(700);
@@ -970,12 +921,11 @@ class PatientPage {
     // -------------------------
     // CITY AUTO-FILL LOGIC
     // -------------------------
-    const cityInput = await this._getInputElementByLabel('City');
-    const currentCity = await cityInput.inputValue();
+    const currentCity = await this.city.inputValue();
 
     if (!currentCity || currentCity.trim() === "") {
       console.log("ACTION: City not auto-filled → entering manually");
-      await cityInput.fill(data.city);
+      await this.city.fill(data.city);
     } else {
       console.log("INFO: City auto-filled → skipping manual entry");
     }
@@ -983,32 +933,31 @@ class PatientPage {
     // -------------------------
     // STATE AUTO-FILL LOGIC
     // -------------------------
-    // Find State dropdown
-    const stateLabel = this.page.locator('label:has-text("State")').first();
-    const stateDropdown = stateLabel.locator('xpath=../..//div[contains(@class,"e-control-wrapper")]').first();
-    
     let stateText = "";
+
     try {
-      stateText = await stateDropdown.locator('input[role="combobox"]').first().getAttribute('aria-label');
+      stateText = await this.stateDropdown.locator('input[role="combobox"]').getAttribute('aria-label');
     } catch {
       stateText = "";
     }
 
+
     if (!stateText || stateText.trim() === "") {
       console.log(`ACTION: State not auto-filled → selecting ${data.state}`);
-      await stateDropdown.click({ force: true });
-      const popup = this.page.locator('div[id$="_popup"]:visible').first();
-      await popup.waitFor({ state: 'visible', timeout: 5000 });
+
+      await this.stateDropdown.click({ force: true });
+
+      const popup = this.dropdownPopup;
+      await popup.waitFor();
+
       await popup.getByRole('option', { name: data.state, exact: true }).click();
-      await this.page.waitForTimeout(300);
     } else {
       console.log("INFO: State auto-filled → skipping manual selection");
     }
 
     // PHONE NUMBER
     console.log(`ACTION: Filling phone number: ${data.phone}`);
-    const phoneInput = await this._getInputElementByLabel('Phone Number');
-    await phoneInput.fill(data.phone);
+    await this.phoneNumber.fill(data.phone);
   }
 
   async checkNoSSN() {
@@ -1031,7 +980,7 @@ class PatientPage {
       await this.saveBtn.scrollIntoViewIfNeeded();
       await this.page.waitForTimeout(300).catch(() => {});
       try {
-        await this.saveBtn.click({ force: true, timeout: 5000 });
+        await this.saveBtn.click({ timeout: 5000 });
       } catch (error) {
         // If click is intercepted, wait a bit more and try force click
         console.log('INFO: Normal click intercepted, waiting and trying force click...');
@@ -1414,8 +1363,7 @@ class PatientPage {
 
   async enterEmailAddress(email) {
     console.log(`ACTION: Entering email address: ${email}`);
-    const emailInput = await this._getInputElementByLabel('Email');
-    await emailInput.fill(email);
+    await this.emailAddress.fill(email);
   }
 
   async selectInsuranceTab() {
@@ -1501,11 +1449,20 @@ class PatientPage {
       // Validate and select Payor Id (required field)
       console.log('VALIDATION: Checking Payor Id is enabled (required field)...');
       // Ensure we're using the correct dropdown scoped to Insurance Policy modal
+      // Wait for the dropdown to be visible first
+      await expect(this.payorIdDropdown).toBeVisible({ timeout: 10000 });
       const payorIdInput = this.payorIdDropdown.locator('input[role="combobox"]').first();
+      await expect(payorIdInput).toBeVisible({ timeout: 10000 });
+      // Check if enabled, if not wait a bit more for it to become enabled
+      const isEnabled = await payorIdInput.isEnabled().catch(() => false);
+      if (!isEnabled) {
+        console.log('INFO: Payor Id input is not enabled yet, waiting for it to become enabled...');
+        await this.page.waitForTimeout(2000);
+      }
       await expect(payorIdInput).toBeEnabled({ timeout: 10000 });
       console.log('ASSERT: Payor Id dropdown is enabled');
       console.log('ACTION: Selecting first available Payor Id...');
-      await this.payorIdDropdown.first().click({ force: true });
+      await this.payorIdDropdown.click({ force: true });
       await this.page.waitForTimeout(500);
       const payorIdPopup = this.page.locator('div[id$="_popup"]:visible').first();
       await payorIdPopup.waitFor({ state: 'visible', timeout: 5000 });
@@ -1532,8 +1489,10 @@ class PatientPage {
     // 2. Fill Policy Number
     if (data.policyNumber) {
       console.log(`ACTION: Filling Policy Number: ${data.policyNumber}`);
-      await expect(this.policyNumberInput).toBeVisible();
+      await expect(this.policyNumberInput).toBeVisible({ timeout: 10000 });
+      await this.policyNumberInput.click(); // Click to focus
       await this.policyNumberInput.fill(data.policyNumber);
+      await this.page.waitForTimeout(500); // Wait for value to be set
     }
 
     // 3. Select Level
@@ -2486,7 +2445,7 @@ class PatientPage {
     
     // Wait for page to be fully loaded before interacting with dropdown
     await this.page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
-    //await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
     await this.page.waitForTimeout(1000);
     
     // Wait for admission status dropdown to be visible and ready
@@ -2733,7 +2692,7 @@ class PatientPage {
     console.log('ACTION: Waiting for patient grid to load...');
     await this.page.waitForTimeout(1500); // Allow grid refresh time
     await this.page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
-    //await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
     await expect(this.patientRows.first()).toBeVisible({ timeout });
     await this.page.waitForTimeout(1000); // Additional stabilization time
     console.log('ASSERT: Patient grid has loaded');
@@ -3396,33 +3355,13 @@ class PatientPage {
   // Validate Patient ID and Billing ID controls
   async validatePatientIdAndBillingIdControls() {
     console.log("STEP 4: Verify that on the Add New Patient popup, the Patient Id control is visible but is disabled");
-    // Find Patient Id input using multiple strategies to avoid modal container match
-    const patientIdLabel = this.page.locator('label:has-text("Patient Id")').first();
-    await expect(patientIdLabel).toBeVisible({ timeout: 5000 });
-    
-    // Try to find the input adjacent to the label
-    let patientIdInput = patientIdLabel.locator('+ input').first();
-    if (!(await patientIdInput.isVisible({ timeout: 1000 }).catch(() => false))) {
-      // Try direct selector for disabled input with e-input class
-      patientIdInput = this.page.locator('input[type="text"][disabled].e-input').first();
-    }
-    
-    await expect(patientIdInput).toBeVisible({ timeout: 5000 });
-    await expect(patientIdInput).toBeDisabled();
+    await expect(this.patientId).toBeVisible();
+    await expect(this.patientId).toBeDisabled();
     console.log("ASSERT: Patient Id control is visible and disabled");
 
     console.log("STEP 5: Verify that on the Add New Patient popup, the Billing Id control is visible and is enabled");
-    // Find Billing Id input using label-based approach
-    const billingIdLabel = this.page.locator('label:has-text("Billing Id")').first();
-    await expect(billingIdLabel).toBeVisible({ timeout: 5000 });
-    
-    let billingIdInput = billingIdLabel.locator('+ input').first();
-    if (!(await billingIdInput.isVisible({ timeout: 1000 }).catch(() => false))) {
-      billingIdInput = this.page.locator('input[id*="billingId"], input[id*="billing_id"]').first();
-    }
-    
-    await expect(billingIdInput).toBeVisible({ timeout: 5000 });
-    await expect(billingIdInput).toBeEnabled();
+    await expect(this.billingId).toBeVisible();
+    await expect(this.billingId).toBeEnabled();
     console.log("ASSERT: Billing Id control is visible and enabled");
   }
 
@@ -3430,16 +3369,14 @@ class PatientPage {
   async validateAndFillFirstName(firstName) {
     console.log("STEP 6: Verify that on the Add New Patient popup, the First Name text field is visible and enabled");
     console.log("STEP 7: Validate user is able to add the Patient's First Name in the First Name text field");
-    const firstNameInput = await this._getInputElementByLabel('First Name');
-    await this.validateAndFillField(firstNameInput, firstName, "First Name");
+    await this.validateAndFillField(this.firstName, firstName, "First Name");
   }
 
   // Validate and fill Last Name
   async validateAndFillLastName(lastName) {
     console.log("STEP 8: Verify that on the Add New Patient popup, the Last Name text field is visible and enabled");
     console.log("STEP 9: Validate user is able to add the Patient's Last Name in the Last Name text field");
-    const lastNameInput = await this._getInputElementByLabel('Last Name');
-    await this.validateAndFillField(lastNameInput, lastName, "Last Name");
+    await this.validateAndFillField(this.lastName, lastName, "Last Name");
   }
 
   // ========== Name Validation Helper Methods ==========
@@ -3561,142 +3498,41 @@ class PatientPage {
   // Fill required fields to isolate name validation
   async fillRequiredFieldsForNameValidation() {
     console.log("ACTION: Filling required fields to isolate name validation...");
-    // Wait for modal to be ready
-    await expect(this.modalTitle).toBeVisible({ timeout: 10000 });
-    await this.page.waitForTimeout(500);
-    
-    // Find DOB input - try multiple strategies for Syncfusion datepicker
-    let dobInputElement = null;
-    
-    // Strategy 1: Direct ID selector (most reliable)
-    try {
-      const directInput = this.page.locator('#patient_dob_datepicker_input').first();
-      await expect(directInput).toBeVisible({ timeout: 3000 });
-      // Check if it's actually an input element
-      const tagName = await directInput.evaluate(el => el.tagName.toLowerCase());
-      if (tagName === 'input') {
-        dobInputElement = directInput;
-        console.log('✔️ Found DOB input using direct ID selector');
-      }
-    } catch (e) {
-      console.log('INFO: Direct ID selector failed, trying alternative...');
-    }
-    
-    // Strategy 2: Find input inside Syncfusion datepicker component
-    if (!dobInputElement) {
-      try {
-        const datepickerInput = this.page.locator('ejs-datepicker#patient_dob_datepicker_input input, ejs-datepicker input[id*="patient_dob"]').first();
-        await expect(datepickerInput).toBeVisible({ timeout: 3000 });
-        dobInputElement = datepickerInput;
-        console.log('✔️ Found DOB input inside Syncfusion datepicker');
-      } catch (e) {
-        console.log('INFO: Syncfusion datepicker selector failed, trying label-based...');
-      }
-    }
-    
-    // Strategy 3: Find by label and traverse to input
-    if (!dobInputElement) {
-      try {
-        const labelBased = this.page.locator(`${this._modalScope} label:has-text("Date of Birth"), ${this._modalScope} label:has-text("DOB")`).first()
-          .locator('..').locator('input, ejs-datepicker input').first();
-        await expect(labelBased).toBeVisible({ timeout: 3000 });
-        dobInputElement = labelBased;
-        console.log('✔️ Found DOB input using label-based selector');
-      } catch (e) {
-        console.log('INFO: Label-based selector failed');
-      }
-    }
-    
-    if (!dobInputElement) {
-      throw new Error('DOB datepicker input not found in Add New Patient modal');
-    }
-    
-    // Fill the DOB - Syncfusion datepickers can be filled directly
-    await dobInputElement.fill('01/15/1990');
-    await this.page.waitForTimeout(1000); // Wait a bit longer for form to update
-    
-    // Wait for gender dropdown to be ready
-    await this.page.waitForLoadState('domcontentloaded');
+    await this.dobInput.fill('01/15/1990');
     await this.page.waitForTimeout(500);
     await this.validateAndSelectGender('Male');
     await this.checkNoSSN();
-    
-    // Fill address - find input by traversing from label
-    const addressLabel = this.page.locator('label:has-text("Address")').first();
-    await expect(addressLabel).toBeVisible({ timeout: 5000 });
-    // Try multiple strategies to find the input
-    let addressInput = addressLabel.locator('+ input').first();
-    if (!(await addressInput.isVisible({ timeout: 1000 }).catch(() => false))) {
-      addressInput = addressLabel.locator('..').locator('input').first();
-    }
-    await expect(addressInput).toBeVisible({ timeout: 5000 });
-    await addressInput.fill('123 Main Street');
-    
-    // Fill zipcode
-    const zipcodeLabel = this.page.locator('label:has-text("Zip Code")').first();
-    await expect(zipcodeLabel).toBeVisible({ timeout: 5000 });
-    let zipcodeInput = zipcodeLabel.locator('+ input').first();
-    if (!(await zipcodeInput.isVisible({ timeout: 1000 }).catch(() => false))) {
-      zipcodeInput = zipcodeLabel.locator('..').locator('input').first();
-    }
-    await expect(zipcodeInput).toBeVisible({ timeout: 5000 });
-    await zipcodeInput.fill('12345');
+    await this.address.fill('123 Main Street');
+    await this.zipcode.fill('12345');
     await this.page.waitForTimeout(700);
-    
-    // Fill phone number
-    const phoneLabel = this.page.locator('label:has-text("Phone Number")').first();
-    await expect(phoneLabel).toBeVisible({ timeout: 5000 });
-    let phoneInput = phoneLabel.locator('+ input').first();
-    if (!(await phoneInput.isVisible({ timeout: 1000 }).catch(() => false))) {
-      phoneInput = phoneLabel.locator('..').locator('input').first();
-    }
-    await expect(phoneInput).toBeVisible({ timeout: 5000 });
-    await phoneInput.fill('(555) 123-4567');
+    await this.phoneNumber.fill('(555) 123-4567');
   }
 
   // Validate all name business logic (PAT-001 to PAT-004)
-  // Helper to get actual input element by label (avoids modal container match)
-  async _getInputElementByLabel(labelText) {
-    const label = this.page.locator(`label:has-text("${labelText}")`).first();
-    await expect(label).toBeVisible({ timeout: 5000 });
-    // Try adjacent sibling first
-    let input = label.locator('+ input').first();
-    if (!(await input.isVisible({ timeout: 1000 }).catch(() => false))) {
-      // Try parent traversal
-      input = label.locator('..').locator('input').first();
-    }
-    await expect(input).toBeVisible({ timeout: 5000 });
-    return input;
-  }
-
   async validateAllNameBusinessLogic() {
-    // Get actual input elements (not modal containers)
-    const firstNameInput = await this._getInputElementByLabel('First Name');
-    const lastNameInput = await this._getInputElementByLabel('Last Name');
-    
     // PAT-001: First name required, 1-100 characters
     console.log("\nPAT-001: Validating First Name - required, 1-100 characters");
-    await lastNameInput.fill('Doe');
-    await this.validateNameLength(firstNameInput, "First Name", 1, 100);
+    await this.lastName.fill('Doe');
+    await this.validateNameLength(this.firstName, "First Name", 1, 100);
 
     // PAT-002: Last name required, 1-100 characters
     console.log("\nPAT-002: Validating Last Name - required, 1-100 characters");
-    await firstNameInput.fill('John');
-    await this.validateNameLength(lastNameInput, "Last Name", 1, 100);
+    await this.firstName.fill('John');
+    await this.validateNameLength(this.lastName, "Last Name", 1, 100);
 
     // PAT-003: Names can contain letters, hyphens, apostrophes, spaces
     console.log("\nPAT-003: Validating names can contain letters, hyphens, apostrophes, spaces");
-    await lastNameInput.fill('Doe');
-    await this.validateNameCharacters(firstNameInput, "First Name");
-    await firstNameInput.fill('John');
-    await this.validateNameCharacters(lastNameInput, "Last Name");
+    await this.lastName.fill('Doe');
+    await this.validateNameCharacters(this.firstName, "First Name");
+    await this.firstName.fill('John');
+    await this.validateNameCharacters(this.lastName, "Last Name");
 
     // PAT-004: Names cannot be all numbers or special characters
     console.log("\nPAT-004: Validating names cannot be all numbers or special characters");
-    await lastNameInput.fill('Doe');
-    await this.validateNameNotAllNumbersOrSpecialChars(firstNameInput, "First Name");
-    await firstNameInput.fill('John');
-    await this.validateNameNotAllNumbersOrSpecialChars(lastNameInput, "Last Name");
+    await this.lastName.fill('Doe');
+    await this.validateNameNotAllNumbersOrSpecialChars(this.firstName, "First Name");
+    await this.firstName.fill('John');
+    await this.validateNameNotAllNumbersOrSpecialChars(this.lastName, "Last Name");
   }
 
   // Fill required fields except DOB to isolate DOB validation
@@ -3769,15 +3605,44 @@ class PatientPage {
     
     if (testSave && !shouldBeValid) {
       await this.save();
+      
+      // Wait for page to process the save action
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
       await this.page.waitForTimeout(2000);
-      const errorToastVisible = await this.errorToast.isVisible({ timeout: 3000 }).catch(() => false);
+      
+      // Check for error toast (validation error)
+      const errorToastVisible = await this.errorToast.isVisible({ timeout: 5000 }).catch(() => false);
+      
+      // Check if modal is still open
       const modalStillOpen = await this.modalTitle.isVisible({ timeout: 3000 }).catch(() => false);
+      
+      // Check for success toast (unexpected - should not appear for invalid DOB)
+      const successToastVisible = await this.successToast.isVisible({ timeout: 2000 }).catch(() => false);
+      
+      // Check if navigated to demographics page (unexpected - should not happen for invalid DOB)
+      const currentUrl = this.page.url();
+      const isOnDemographicsPage = currentUrl.includes('/patient/') || currentUrl.includes('demographics');
       
       if (errorToastVisible || modalStillOpen) {
         console.log(`ASSERT: DOB "${dateStr}" is rejected (invalid as expected)`);
         if (errorToastVisible) {
+          // Wait for toast to be fully visible
+          await this.page.waitForTimeout(1000);
+          // Dismiss error toast
           await this.page.keyboard.press('Escape').catch(() => {});
           await this.page.waitForTimeout(500);
+        }
+      } else if (successToastVisible || isOnDemographicsPage) {
+        console.log(`WARNING: DOB "${dateStr}" was accepted but should have been rejected`);
+        // Navigate back to patients page if needed
+        if (isOnDemographicsPage) {
+          try {
+            await this.patientsTab.click({ timeout: 10000, force: true });
+            await this.page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+            await this.page.waitForTimeout(2000);
+          } catch (error) {
+            console.log(`WARNING: Could not navigate back to patients page: ${error.message}`);
+          }
         }
       } else {
         console.log(`INFO: Modal closed after invalid DOB save - will reopen for next test`);
@@ -6272,8 +6137,56 @@ class PatientPage {
   // Navigate back to patients list for duplicate testing
   async navigateBackToPatientsListForDuplicateTesting(loginPage) {
     console.log('STEP: Navigating back to Patients list to test duplicate detection...');
-    await this.navigateToPatientsTab(loginPage);
-    await expect(this.addPatientBtn).toBeVisible();
+    
+    // Use tab button click instead of page.goto() to avoid timeout issues
+    try {
+      // Wait for any loaders to disappear
+      await this.page.waitForTimeout(2000);
+      const loaderVisible = await this.page.locator('.loader-wrapper').isVisible({ timeout: 2000 }).catch(() => false);
+      if (loaderVisible) {
+        await this.page.waitForSelector('.loader-wrapper', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      }
+      
+      // Click Patients tab button
+      await this.patientsTab.click({ timeout: 15000, force: true });
+      
+      // Wait for navigation to complete
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 20000 }).catch(() => {
+        this.page.waitForLoadState('networkidle', { timeout: 15000 });
+      });
+      
+      // Wait for loader to disappear
+      const loaderVisibleAfterNav = await this.page.locator('.loader-wrapper').isVisible({ timeout: 2000 }).catch(() => false);
+      if (loaderVisibleAfterNav) {
+        await this.page.waitForSelector('.loader-wrapper', { state: 'hidden', timeout: 15000 }).catch(() => {});
+      }
+      
+      // Wait for patients page to be ready
+      await this.page.waitForTimeout(3000);
+      
+      // Verify we're on patients page and Add Patient button is visible
+      await expect(this.addPatientBtn).toBeVisible({ timeout: 15000 });
+      
+      // Additional wait to ensure page is fully loaded
+      await this.page.waitForTimeout(2000);
+      
+      console.log('ASSERT: Successfully navigated to Patients page');
+    } catch (error) {
+      console.log(`WARNING: Error navigating using tab button: ${error.message}`);
+      // Fallback: Try using page.goto() with domcontentloaded instead of networkidle
+      try {
+        const currentUrl = this.page.url();
+        const baseUrl = currentUrl.split('/patient')[0];
+        await this.page.goto(baseUrl + '/patients', { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await this.page.waitForLoadState('domcontentloaded', { timeout: 15000 });
+        await this.page.waitForTimeout(3000);
+        await expect(this.addPatientBtn).toBeVisible({ timeout: 15000 });
+        console.log('INFO: Navigated to Patients page using URL navigation (fallback)');
+      } catch (navError) {
+        console.log(`ERROR: Both navigation methods failed: ${navError.message}`);
+        throw navError;
+      }
+    }
   }
 
   // Validate all Duplicate Detection business logic (PAT-DUP-001 to PAT-DUP-005)
@@ -6342,39 +6255,14 @@ class PatientPage {
   // Validate and fill DOB
   async validateAndFillDOB(dob) {
     console.log("STEP 10: Verify that on the Add New Patient popup, the DOB calendar control is visible and enabled");
-    
-    // Find DOB input using multiple strategies to avoid modal container match
-    const dobSelectors = [
-      '#patient_dob_datepicker_input',
-      'ejs-datepicker#patient_dob_datepicker_input input',
-      'input[id*="patient_dob"][id*="datepicker"]',
-      'ejs-datepicker input[id*="dob"]'
-    ];
-    
-    let dobInputElement = null;
-    for (const selector of dobSelectors) {
-      try {
-        const candidate = this.page.locator(selector).first();
-        await expect(candidate).toBeVisible({ timeout: 2000 });
-        dobInputElement = candidate;
-        console.log(`✔️ Found DOB input using selector`);
-        break;
-      } catch (e) {
-        continue;
-      }
-    }
-    
-    if (!dobInputElement) {
-      throw new Error('DOB datepicker input not found in Add New Patient modal');
-    }
-    
-    await expect(dobInputElement).toBeEnabled();
+    await expect(this.dobInput).toBeVisible();
+    await expect(this.dobInput).toBeEnabled();
     console.log("ASSERT: DOB calendar control is visible and enabled");
 
     console.log("STEP 11: Validate user is able to add/select the Patient's DOB using the calendar control");
-    await dobInputElement.fill(dob);
+    await this.dobInput.fill(dob);
     await this.page.waitForTimeout(500);
-    const enteredDob = await dobInputElement.inputValue();
+    const enteredDob = await this.dobInput.inputValue();
     expect(enteredDob).toContain('1990'); // Check if date was entered
     console.log(`ASSERT: DOB "${dob}" entered successfully`);
   }
@@ -6382,48 +6270,11 @@ class PatientPage {
   // Validate and select Gender
   async validateAndSelectGender(gender) {
     console.log("STEP 12: Verify that on the Add New Patient popup, the Gender dropdown is visible and enabled");
-    // Wait for modal to be ready
-    await expect(this.modalTitle).toBeVisible({ timeout: 5000 });
-    await this.page.waitForTimeout(500);
-    
-    // Wait for Gender label to appear first
-    await this.page.waitForSelector('label:has-text("Gender")', { state: 'visible', timeout: 10000 });
-    await this.page.waitForTimeout(500);
-    
-    // Try to find gender dropdown with flexible selectors
-    let genderDropdownElement = null;
-    const genderSelectors = [
-      // Try direct selector first
-      this.page.locator('label:has-text("Gender")').first().locator('xpath=../..//div[contains(@class,"e-control-wrapper")]'),
-      // Try with modal scope
-      this.page.locator(`${this._modalScope} label:has-text("Gender")`).first().locator('xpath=../..//div[contains(@class,"e-control-wrapper")]'),
-      // Try the instance property
-      this.genderDropdown
-    ];
-    
-    for (const selector of genderSelectors) {
-      try {
-        await expect(selector).toBeVisible({ timeout: 3000 });
-        genderDropdownElement = selector;
-        console.log('✔️ Gender dropdown found');
-        break;
-      } catch (e) {
-        continue;
-      }
-    }
-    
-    if (!genderDropdownElement) {
-      throw new Error('Gender dropdown not found in Add New Patient modal');
-    }
-    
-    // Wait for the dropdown to be fully ready
-    await this.page.waitForTimeout(500);
-    const genderInput = genderDropdownElement.locator('input[role="combobox"]').first();
-    await expect(genderInput).toBeVisible({ timeout: 5000 });
-    await expect(genderInput).toBeEnabled({ timeout: 5000 });
+    await expect(this.genderDropdown).toBeVisible();
+    await expect(this.genderDropdown.locator('input[role="combobox"]')).toBeEnabled();
     console.log("ASSERT: Gender dropdown is visible and enabled");
     console.log("STEP 13: Validate user is able to select the Patient's Gender using the dropdown control");
-    await this.selectDropdownOption(genderDropdownElement, gender, "Gender");
+    await this.selectDropdownOption(this.genderDropdown, gender, "Gender");
   }
 
   // Validate and fill SSN
@@ -6449,38 +6300,28 @@ class PatientPage {
   async validateAndFillAddress(address) {
     console.log("STEP 17: Verify that on the Add New Patient popup, the Address text field is visible and enabled");
     console.log("STEP 18: Validate user is able to add the Patient's Address in the Address text field");
-    const addressInput = await this._getInputElementByLabel('Address');
-    await this.validateAndFillField(addressInput, address, "Address");
+    await this.validateAndFillField(this.address, address, "Address");
   }
 
   // Validate Zip, City, and State controls and fill Zip Code
   async validateZipCityStateControlsAndFillZip(zipCode) {
     console.log("STEP 19: Verify that on the Add New Patient popup, the Zip, City and State controls are visible and are enabled");
-    // Get actual input elements
-    const zipcodeInput = await this._getInputElementByLabel('Zip Code');
-    const cityInput = await this._getInputElementByLabel('City');
-    
-    await expect(zipcodeInput).toBeVisible();
-    await expect(zipcodeInput).toBeEnabled();
-    await expect(cityInput).toBeVisible();
-    await expect(cityInput).toBeEnabled();
-    
-    // Find State dropdown
-    const stateLabel = this.page.locator('label:has-text("State")').first();
-    await expect(stateLabel).toBeVisible({ timeout: 5000 });
-    const stateDropdown = stateLabel.locator('xpath=../..//div[contains(@class,"e-control-wrapper")]').first();
-    await expect(stateDropdown).toBeVisible();
-    await expect(stateDropdown.locator('input[role="combobox"]').first()).toBeEnabled();
+    await expect(this.zipcode).toBeVisible();
+    await expect(this.zipcode).toBeEnabled();
+    await expect(this.city).toBeVisible();
+    await expect(this.city).toBeEnabled();
+    await expect(this.stateDropdown).toBeVisible();
+    await expect(this.stateDropdown.locator('input[role="combobox"]')).toBeEnabled();
     console.log("ASSERT: Zip, City and State controls are visible and enabled");
 
     console.log("STEP 20: Verify that on the Add New Patient popup, the Zip Code text field is visible and enabled");
-    await expect(zipcodeInput).toBeVisible();
-    await expect(zipcodeInput).toBeEnabled();
+    await expect(this.zipcode).toBeVisible();
+    await expect(this.zipcode).toBeEnabled();
     console.log("ASSERT: Zip Code text field is visible and enabled");
 
     console.log("STEP 21: Validate user is able to add the Patient's address-related Zip Code in the Zip Code text field");
-    await zipcodeInput.fill(zipCode);
-    const enteredZipCode = await zipcodeInput.inputValue();
+    await this.zipcode.fill(zipCode);
+    const enteredZipCode = await this.zipcode.inputValue();
     expect(enteredZipCode).toBe(zipCode);
     console.log(`ASSERT: Zip Code "${zipCode}" entered successfully`);
   }
@@ -6490,16 +6331,10 @@ class PatientPage {
     console.log("STEP 22: Verify when the user enters the Zip information, the relevant City and State information/data should prepopulate in respective controls");
     
     console.log("STEP 23: Clicking on City field to trigger auto-population...");
-    // Get City input element
-    const cityInput = await this._getInputElementByLabel('City');
-    await cityInput.click();
+    await this.city.click();
     await this.page.waitForTimeout(500);
     
     console.log("STEP 24: Waiting for City and State auto-fill to appear...");
-    // Find State dropdown
-    const stateLabel = this.page.locator('label:has-text("State")').first();
-    const stateDropdown = stateLabel.locator('xpath=../..//div[contains(@class,"e-control-wrapper")]').first();
-    
     let autoFilledCity = '';
     let autoFilledState = '';
     const maxWaitTime = 10000;
@@ -6507,8 +6342,8 @@ class PatientPage {
     const maxAttempts = maxWaitTime / pollInterval;
     
     for (let i = 0; i < maxAttempts; i++) {
-      autoFilledCity = await cityInput.inputValue();
-      autoFilledState = await stateDropdown.locator('input[role="combobox"]').first().inputValue();
+      autoFilledCity = await this.city.inputValue();
+      autoFilledState = await this.stateDropdown.locator('input[role="combobox"]').inputValue();
       
       if ((autoFilledCity && autoFilledCity.trim() !== '') || (autoFilledState && autoFilledState.trim() !== '')) {
         console.log("ASSERT: City and/or State auto-fill detected");
@@ -6532,27 +6367,21 @@ class PatientPage {
   async validateAndFillEmail(email) {
     console.log("STEP 25: Verify that on the Add New Patient popup, the Email text field is visible and enabled");
     console.log("STEP 26: Validate user is able to add the Patient's related email in the Email text field");
-    const emailInput = await this._getInputElementByLabel('Email');
-    await this.validateAndFillField(emailInput, email, "Email");
+    await this.validateAndFillField(this.emailAddress, email, "Email");
   }
 
   // Validate and select Preferred Contact
   async validateAndSelectPreferredContact() {
     console.log("STEP 27: Verify that on the Add New Patient popup, the Preferred Contact dropdown is visible and enabled");
-    // Find Preferred Contact dropdown using label-based approach
-    const preferredContactLabel = this.page.locator('label:has-text("Preferred Contact")').first();
-    await expect(preferredContactLabel).toBeVisible({ timeout: 5000 });
-    const preferredContactDropdown = preferredContactLabel.locator('xpath=../..//div[contains(@class,"e-control-wrapper")]').first();
-    await expect(preferredContactDropdown).toBeVisible();
-    await expect(preferredContactDropdown.locator('input[role="combobox"]').first()).toBeEnabled();
+    await expect(this.preferredContactDropdown).toBeVisible();
+    await expect(this.preferredContactDropdown.locator('input[role="combobox"]')).toBeEnabled();
     console.log("ASSERT: Preferred Contact dropdown is visible and enabled");
 
     console.log("STEP 28: Validate user is able to select the Patient's Preferred Contact options using the dropdown control");
-    await preferredContactDropdown.click({ force: true });
+    await this.preferredContactDropdown.click({ force: true });
     await this.page.waitForTimeout(500);
-    const dropdownPopup = this.page.locator('div[id$="_popup"]:visible').first();
-    await dropdownPopup.waitFor({ state: 'visible', timeout: 5000 });
-    const firstPreferredContactOption = dropdownPopup.locator('li[role="option"]').first();
+    await this.dropdownPopup.waitFor({ state: 'visible', timeout: 5000 });
+    const firstPreferredContactOption = this.dropdownPopup.locator('li[role="option"]').first();
     const preferredContactText = await firstPreferredContactOption.textContent();
     await firstPreferredContactOption.click();
     await this.page.waitForTimeout(300);
@@ -6563,27 +6392,21 @@ class PatientPage {
   async validateAndFillPhoneNumber(phone) {
     console.log("STEP 29: Verify that on the Add New Patient popup, the Phone Number text field is visible and enabled");
     console.log("STEP 30: Validate user is able to add the Patient's Phone Number in the Phone Number text field");
-    const phoneInput = await this._getInputElementByLabel('Phone Number');
-    await this.validateAndFillField(phoneInput, phone, "Phone Number");
+    await this.validateAndFillField(this.phoneNumber, phone, "Phone Number");
   }
 
   // Validate and select Referral Source
   async validateAndSelectReferralSource() {
     console.log("STEP 31: Verify that on the Add New Patient popup, the Referral Source dropdown is visible and enabled");
-    // Find Referral Source dropdown using label-based approach
-    const referralSourceLabel = this.page.locator('label:has-text("Referral Source")').first();
-    await expect(referralSourceLabel).toBeVisible({ timeout: 5000 });
-    const referralSourceDropdown = referralSourceLabel.locator('xpath=../..//div[contains(@class,"e-control-wrapper")]').first();
-    await expect(referralSourceDropdown).toBeVisible();
-    await expect(referralSourceDropdown.locator('input[role="combobox"]').first()).toBeEnabled();
+    await expect(this.referralSourceDropdown).toBeVisible();
+    await expect(this.referralSourceDropdown.locator('input[role="combobox"]')).toBeEnabled();
     console.log("ASSERT: Referral Source dropdown is visible and enabled");
 
     console.log("STEP 32: Validate user is able to select the Patient's Referral Source options using the dropdown control");
-    await referralSourceDropdown.click({ force: true });
+    await this.referralSourceDropdown.click({ force: true });
     await this.page.waitForTimeout(500);
-    const dropdownPopup = this.page.locator('div[id$="_popup"]:visible').first();
-    await dropdownPopup.waitFor({ state: 'visible', timeout: 5000 });
-    const firstReferralSourceOption = dropdownPopup.locator('li[role="option"]').first();
+    await this.dropdownPopup.waitFor({ state: 'visible', timeout: 5000 });
+    const firstReferralSourceOption = this.dropdownPopup.locator('li[role="option"]').first();
     const referralSourceText = await firstReferralSourceOption.textContent();
     await firstReferralSourceOption.click();
     await this.page.waitForTimeout(300);
@@ -6732,54 +6555,9 @@ class PatientPage {
   // Validate Cancel button closes popup
   async validateCancelButtonClosesPopup() {
     console.log('STEP: Validate by clicking on the Cancel button the Add New Patient popup should close');
-    
-    // Get the modal backdrop to check if it disappears
-    const modalBackdrop = this.page.locator('.modal-backdrop.show, .modal-backdrop[style*="display"]').first();
-    const backdropVisible = await modalBackdrop.isVisible({ timeout: 1000 }).catch(() => false);
-    
-    // Click the Cancel button
-    await this.cancelBtn.click({ force: true });
-    await this.page.waitForTimeout(300); // Small wait for click to register
-    
-    // Wait for modal to close - check multiple indicators
-    console.log('ASSERT: Validating Add New Patient popup is closed...');
-    
-    // Strategy 1: Wait for backdrop to disappear (if it was visible)
-    if (backdropVisible) {
-      try {
-        await expect(modalBackdrop).not.toBeVisible({ timeout: 5000 });
-        console.log('ASSERT: Modal backdrop is hidden');
-      } catch (e) {
-        console.log('INFO: Backdrop check timed out, trying alternative method...');
-      }
-    }
-    
-    // Strategy 2: Wait for modal to not have .show class or be hidden
-    const modalWindow = this.page.locator('ngb-modal-window.show, .modal.show').first();
-    await expect(modalWindow).not.toBeVisible({ timeout: 10000 }).catch(async () => {
-      // If still visible, check if it's in the process of hiding
-      console.log('INFO: Modal still has .show class, waiting for animation...');
-      await this.page.waitForTimeout(1000);
-      // Check if modal is hidden via CSS (display: none or opacity)
-      const isActuallyHidden = await modalWindow.evaluate((el) => {
-        const style = window.getComputedStyle(el);
-        return style.display === 'none' || style.visibility === 'hidden' || el.offsetParent === null;
-      }).catch(() => false);
-      
-      if (!isActuallyHidden) {
-        // Wait a bit more and try again
-        await this.page.waitForTimeout(1000);
-        await expect(modalWindow).not.toBeVisible({ timeout: 3000 });
-      }
-    });
-    
-    // Strategy 3: Verify modal title is not visible
-    const titleVisible = await this.modalTitle.isVisible({ timeout: 2000 }).catch(() => false);
-    if (titleVisible) {
-      console.log('WARNING: Modal title still visible after close, waiting...');
-      await this.page.waitForTimeout(1000);
-    }
-    
+    await this.cancelBtn.click();
+    await this.page.waitForTimeout(500);
+    await expect(this.modalTitle).not.toBeVisible({ timeout: 5000 });
     console.log('ASSERT: Add New Patient popup is closed after clicking Cancel button');
   }
 
@@ -6912,70 +6690,11 @@ class PatientPage {
     console.log('STEP: Validate by clicking on the Save button the appointment information should be saved and the Patient Added Successfully alert should be displayed');
     await this.save();
   
-    console.log('STEP: Verifying success toast or navigation...');
-    // Wait a bit for toast to appear or navigation to happen
-    await this.page.waitForTimeout(1500);
-    
-    // Try to find success toast first
-    const toastSelectors = [
-      '#toast-container:has-text("success")',
-      '#toast-container:has-text("Success")',
-      '.toast-success',
-      '.toast-container .toast-success',
-      '[role="alert"]:has-text("success")',
-      '.alert-success'
-    ];
-    
-    let toastFound = false;
-    for (const selector of toastSelectors) {
-      try {
-        const candidate = this.page.locator(selector).first();
-        const isVisible = await candidate.isVisible({ timeout: 3000 }).catch(() => false);
-        if (isVisible) {
-          const toastText = await candidate.textContent().catch(() => '');
-          if (toastText && toastText.toLowerCase().includes('success')) {
-            console.log(`✔️ Success toast found: ${toastText}`);
-            toastFound = true;
-            break;
-          }
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-    
-    // If toast not found, check if we navigated to patient demographics page (which indicates success)
-    if (!toastFound) {
-      console.log('INFO: Toast not found, checking for navigation to Patient Demographics page...');
-      try {
-        // Check if URL contains patient demographics or patient ID
-        await this.page.waitForURL(/\/patients\/\d+|\/patient\/|\/demographics/, { timeout: 5000 }).catch(() => {});
-        const currentUrl = this.page.url();
-        if (currentUrl.includes('/patients/') || currentUrl.includes('/patient/') || currentUrl.includes('/demographics')) {
-          console.log('✔️ Navigation to Patient Demographics page confirmed - patient saved successfully');
-          toastFound = true;
-        }
-      } catch (e) {
-        // Continue to check toast container
-      }
-    }
-    
-    // Final check: look for any toast container with success message
-    if (!toastFound) {
-      try {
-        const toastContainer = this.page.locator('#toast-container').first();
-        await expect(toastContainer).toBeVisible({ timeout: 5000 });
-        const containerText = await toastContainer.textContent().catch(() => '');
-        if (containerText && containerText.toLowerCase().includes('success')) {
-          console.log('✔️ Success message found in toast container');
-          toastFound = true;
-        }
-      } catch (e) {
-        console.log('WARNING: Could not find success toast, but continuing with test...');
-      }
-    }
-    
-    console.log('ASSERT: Patient Added Successfully alert is displayed or navigation confirmed');
+    console.log('STEP: Verifying success toast...');
+    await expect(this.successToast).toBeVisible({ timeout: 10000 });
+    const successToastText = await this.successToast.textContent().catch(() => '');
+    expect(successToastText.toLowerCase()).toContain('success');
+    console.log('ASSERT: Patient Added Successfully alert is displayed');
   }
 
   // Verify navigation to Patient Demographics page
@@ -8430,72 +8149,6 @@ class PatientPage {
       console.log("INFO: Last button is disabled - may indicate only one page of data or already on last page");
     }
     console.log("\nASSERT: Pagination navigation functionality is validated");
-  }
-
-  // Verify Add New Patient modal is displayed
-  async verifyModalDisplayed() {
-    console.log("ASSERT: Validating Add New Patient popup is displayed...");
-    await expect(this.modalTitle).toBeVisible({ timeout: 10000 });
-    console.log("ASSERT: Add New Patient popup is displayed successfully");
-  }
-
-  // Verify modal close button is visible
-  async verifyModalCloseButton() {
-    console.log("ASSERT: Validating cross mark icon is displayed on the header...");
-    await expect(this.modalCloseButton).toBeVisible({ timeout: 10000 });
-    console.log("ASSERT: Cross mark icon is displayed on the header");
-  }
-
-  // Close modal and verify it's closed
-  async closeModalAndVerify() {
-    console.log("ACTION: Clicking on the cross mark icon...");
-    await expect(this.modalCloseButton).toBeVisible({ timeout: 5000 });
-    
-    // Get the modal backdrop to check if it disappears
-    const modalBackdrop = this.page.locator('.modal-backdrop.show, .modal-backdrop[style*="display"]').first();
-    const backdropVisible = await modalBackdrop.isVisible({ timeout: 1000 }).catch(() => false);
-    
-    // Click the close button
-    await this.modalCloseButton.click({ force: true });
-    await this.page.waitForTimeout(300);
-    
-    // Wait for modal to close - check multiple indicators
-    console.log("ASSERT: Validating Add New Patient popup is closed...");
-    
-    // Strategy 1: Wait for backdrop to disappear (if it was visible)
-    if (backdropVisible) {
-      try {
-        await expect(modalBackdrop).not.toBeVisible({ timeout: 5000 });
-        console.log("ASSERT: Modal backdrop is hidden");
-      } catch (e) {
-        console.log("INFO: Backdrop check timed out, trying alternative method...");
-      }
-    }
-    
-    // Strategy 2: Wait for modal to not have .show class or be hidden
-    const modalWindow = this.page.locator('ngb-modal-window.show, .modal.show').first();
-    await expect(modalWindow).not.toBeVisible({ timeout: 10000 }).catch(async () => {
-      console.log("INFO: Modal still has .show class, waiting for animation...");
-      await this.page.waitForTimeout(1000);
-      const isActuallyHidden = await modalWindow.evaluate((el) => {
-        const style = window.getComputedStyle(el);
-        return style.display === 'none' || style.visibility === 'hidden' || el.offsetParent === null;
-      }).catch(() => false);
-      
-      if (!isActuallyHidden) {
-        await this.page.waitForTimeout(1000);
-        await expect(modalWindow).not.toBeVisible({ timeout: 3000 });
-      }
-    });
-    
-    // Strategy 3: Verify modal title is not visible
-    const titleVisible = await this.modalTitle.isVisible({ timeout: 2000 }).catch(() => false);
-    if (titleVisible) {
-      console.log("WARNING: Modal title still visible after close, waiting...");
-      await this.page.waitForTimeout(1000);
-    }
-    
-    console.log("ASSERT: Add New Patient popup is closed successfully");
   }
 }
 
