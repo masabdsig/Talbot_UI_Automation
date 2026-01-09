@@ -14,8 +14,11 @@ test.describe('Patient Portal New Request Creation and Form Validation', () => {
     await portalRequests.navigateToDashboard();
     
     // Skip MFA if visible
-    await expect(portalRequests.skipMfaButton).toBeVisible();
-    await portalRequests.skipMfa();
+    const skipMfaVisible = await portalRequests.skipMfaButton.isVisible({ timeout: 5000 }).catch(() => false);
+    if (skipMfaVisible) {
+      await portalRequests.skipMfa();
+      console.log('✔️ MFA skipped');
+    }
     
     // Navigate to Portal Requests page
     await portalRequests.navigateToPortalRequests();
@@ -262,7 +265,6 @@ test.describe('Patient Portal New Request Creation and Form Validation', () => {
     console.log(`✅ Records Validated: ${validationResult.validatedRows}/${validationResult.totalRows}`);
     console.log('✅ TC05: Action Buttons Validation - COMPLETED');
   });
-
   test('TC06-Patient Portal Rejection Workflow', async ({ page }) => {
     const portalRequests = new PortalRequestsPage(page);
 

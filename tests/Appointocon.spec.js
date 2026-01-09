@@ -8,8 +8,11 @@ test.describe('Appointments To Confirm Feature', () => {
   test.beforeEach(async ({ page }) => {
     appointocon = new Appointocon(page);
     await page.goto('/dashboard');
-    await expect(appointocon.skipMfaButton).toBeVisible();
-    await appointocon.skipMfa();
+    const skipMfaVisible = await appointocon.skipMfaButton.isVisible({ timeout: 5000 }).catch(() => false);
+    if (skipMfaVisible) {
+      await appointocon.skipMfa();
+      console.log('✔️ MFA skipped');
+    }
     if (!(await appointocon.isWidgetAvailable())) {
       test.skip('No Appointments To Confirm available in the system - widget not visible on dashboard. Tests skipped.');
     }

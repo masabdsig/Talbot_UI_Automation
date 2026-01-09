@@ -14,8 +14,11 @@ test.describe('Probation Portal Navigation and Default State', () => {
     await probationPortal.navigateToDashboard();
     
     // Skip MFA if visible
-    await expect(probationPortal.skipMfaButton).toBeVisible({ timeout: 10000 });
-    await probationPortal.skipMfa();
+    const skipMfaVisible = await probationPortal.skipMfaButton.isVisible({ timeout: 10000 }).catch(() => false);
+    if (skipMfaVisible) {
+      await probationPortal.skipMfa();
+      console.log('✔️ MFA skipped');
+    }
     
     // Navigate to Portal Requests page via UI (using Quick Menu)
     await probationPortal.navigateToPortalRequestsViaUI();

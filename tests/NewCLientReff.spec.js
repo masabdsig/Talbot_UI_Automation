@@ -10,8 +10,11 @@ test.describe('New Client Referrals To Be Called (Refactored)', () => {
   test.beforeEach(async ({ page }) => {
     newClient = new NewClientPage(page);
     await page.goto('/dashboard');
-    await expect(newClient.skipMfaButton).toBeVisible();
-    await newClient.skipMfa();
+    const skipMfaVisible = await newClient.skipMfaButton.isVisible({ timeout: 5000 }).catch(() => false);
+    if (skipMfaVisible) {
+      await newClient.skipMfa();
+      console.log('✔️ MFA skipped');
+    }
     const available = await newClient.isWidgetAvailable();
     if (!available) {
       test.skip('No New Client Referrals available in the system - widget not visible on dashboard. Tests skipped.');
