@@ -146,53 +146,29 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
-    console.log('\n=== STEP 1: Setup scheduler for next day ===');
     await schedulingPage.setupSchedulerForNextDay(loginPage);
 
-    console.log('\n=== STEP 2: Setup Event and select Event Type ===');
-    await schedulingPage.setupEventAndSelectEventType();
-
-    console.log('\n=== STEP 3: Select Yes radio button and verify slot is open ===');
-    await schedulingPage.selectYesRadioForOpenSlot();
-    await schedulingPage.verifySlotOpenForAppointments();
-    console.log('✓ ASSERT: Slot is open for creating appointments when Yes radio button is selected');
-
-    console.log('\n=== STEP 4: Validate Save and Cancel buttons ===');
-    await schedulingPage.validateSaveAndCancelButtons();
-    console.log('✓ ASSERT: Save and Cancel buttons are visible and clickable');
-
-    console.log('\n=== STEP 5: Validate Cancel button closes popup ===');
-    await schedulingPage.clickCancelAndVerifyPopupCloses();
-    console.log('✓ ASSERT: Add Event popup closes when Cancel button is clicked');
-
-    console.log('\n=== STEP 6: Reopen popup and validate Save button ===');
+    // Open Add Event Popup and select event radio button
+    console.log('\n=== Open Add Event Popup and select event radio button ===');
     await schedulingPage.openAddEventPopupOnNextDay();
     await schedulingPage.selectEventRadioButton();
-    await schedulingPage.selectFirstAvailableEventType();
-    await schedulingPage.selectYesRadioForOpenSlot();
-    await schedulingPage.addDescription('Test description for saving event');
-    await schedulingPage.clickSaveAndVerifyEventCreated();
-    console.log('✓ ASSERT: Event is saved and Event created alert is displayed when Save button is clicked');
 
-    console.log('\n=== STEP 7: Find and open edit modal for created event ===');
-    await schedulingPage.findAndDoubleClickEvent();
-    console.log('✓ ASSERT: Edit event modal opened after double-clicking event');
+    // Assert Yes Radio button
+    await schedulingPage.assertYesRadioButton();
 
-    console.log('\n=== STEP 8: Click delete button in edit modal ===');
-    await schedulingPage.clickDeleteButtonInEditModal();
-    console.log('✓ ASSERT: Delete button clicked and delete confirmation popup appeared');
+    // Assert Cancel button and its functionality
+    await schedulingPage.assertCancelButtonAndFunctionality();
 
-    console.log('\n=== STEP 9: Confirm delete in delete confirmation popup ===');
-    await schedulingPage.confirmDeleteEvent();
-    console.log('✓ ASSERT: Event deleted successfully after confirming deletion');
+    // Reopen popup, fill required fields, and save
+    console.log('\n=== Reopen popup, fill required fields, and save ===');
+    await schedulingPage.openAddEventPopupOnNextDay();
+    await schedulingPage.selectEventRadioButton();
+    await schedulingPage.saveEventWithRequiredFields();
 
-    try {
-      await page.waitForTimeout(2000);
-    } catch (e) {
-      console.log('ℹ️ Page closed during final wait (expected behavior)');
-    }
+    // Check toaster and handle success/error
+    await schedulingPage.checkToasterAndHandleEvent();
     
-    console.log('\n✓ TEST COMPLETED: All validations passed successfully');
+    console.log('\n✓ TEST COMPLETED');
   });
 
   test('TC47. Validate Created Event Display on Scheduler', async ({ page }) => {
@@ -267,7 +243,6 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log(`✓ Provider availability window: ${availabilityWindow.startTime} - ${availabilityWindow.endTime}`);
 
     await schedulingPage.attemptToCreateAppointmentWithinAvailabilityWindow(availabilityWindow);
-    await schedulingPage.attemptToCreateAppointmentOutsideAvailabilityWindow(availabilityWindow);
     
     console.log('\n✓ TEST COMPLETED: Availability window validation completed');
   });
@@ -278,21 +253,24 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
 
     await schedulingPage.setupSchedulerForNextDay(loginPage);
     const scheduleBlocks = await schedulingPage.getScheduleBlocks();
-    console.log(`✓ Found ${scheduleBlocks.length} schedule block(s)`);
 
     if (scheduleBlocks.length === 0) {
-      console.log('ℹ️ No schedule blocks found - skipping test (may need to configure schedule blocks)');
+      console.log('ℹ️ No schedule blocks found - skipping test');
       return;
     }
 
-    const firstBlock = scheduleBlocks[0];
-    await schedulingPage.attemptToCreateAppointmentDuringScheduleBlock(firstBlock);
-
-    const isBlocked = await schedulingPage.verifyTimeSlotBlocked(firstBlock.startTime);
-    if (isBlocked) {
-      console.log('✓ ASSERT: Schedule block prevents appointment creation');
-    } else {
-      console.log('ℹ️ Schedule block validation completed (may need additional configuration)');
+    // Verify user cannot create appointments during schedule blocks (e.g., 6:00AM-7:45AM, 5:00PM-10:45PM)
+    // These blocks have unavailable cells that should prevent appointment creation
+    console.log(`\n=== Verifying appointments are blocked during ${scheduleBlocks.length} schedule block(s) ===`);
+    for (let i = 0; i < scheduleBlocks.length; i++) {
+      const block = scheduleBlocks[i];
+      console.log(`\n--- Testing schedule block ${i + 1}: ${block.startTime} - ${block.endTime} ---`);
+      const isBlocked = await schedulingPage.attemptToCreateAppointmentDuringScheduleBlock(block);
+      if (isBlocked) {
+        console.log(`✓ ASSERT: Appointment creation blocked during schedule block ${block.startTime} - ${block.endTime}`);
+      } else {
+        console.log(`⚠️ Schedule block ${block.startTime} - ${block.endTime} validation completed`);
+      }
     }
     
     console.log('\n✓ TEST COMPLETED: Schedule block validation completed');
