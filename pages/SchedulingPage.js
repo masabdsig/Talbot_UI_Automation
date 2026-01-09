@@ -417,9 +417,41 @@ class SchedulingPage {
   // Radio button methods
   async selectAppointmentRadioButton() {
     console.log('STEP: Selecting Appointment radio button...');
+    
+    // Wait for modal to be visible
+    const modal = this.modal();
+    await modal.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+    
+    // Wait for radio buttons to be present in the modal
+    const radioButtons = modal.locator('input[type="radio"]');
+    await radioButtons.first().waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+    
+    // Wait for page to be ready
     await this.page.waitForLoadState('domcontentloaded', { timeout: 2000 }).catch(() => {});
-    const radio = await this._findRadioByText('appointment');
-    if (!radio) throw new Error('Appointment radio button not found');
+    
+    // Find the appointment radio button with retries
+    let radio = null;
+    const maxRetries = 3;
+    for (let retry = 0; retry < maxRetries; retry++) {
+      radio = await this._findRadioByText('appointment');
+      if (radio) {
+        const isVisible = await radio.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          break;
+        }
+      }
+      if (retry < maxRetries - 1) {
+        console.log(`ℹ️ Appointment radio button not found, retrying (attempt ${retry + 1}/${maxRetries})...`);
+        await this.page.waitForTimeout(1000);
+      }
+    }
+    
+    if (!radio) {
+      throw new Error('Appointment radio button not found after multiple attempts');
+    }
+    
     await radio.scrollIntoViewIfNeeded();
     await this.page.waitForTimeout(200);
     await radio.click({ force: true });
@@ -430,9 +462,41 @@ class SchedulingPage {
 
   async selectEventRadioButton() {
     console.log('STEP: Selecting Event radio button...');
+    
+    // Wait for modal to be visible
+    const modal = this.modal();
+    await modal.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+    
+    // Wait for radio buttons to be present in the modal
+    const radioButtons = modal.locator('input[type="radio"]');
+    await radioButtons.first().waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+    
+    // Wait for page to be ready
     await this.page.waitForLoadState('domcontentloaded', { timeout: 2000 }).catch(() => {});
-    const radio = await this._findRadioByText('event');
-    if (!radio) throw new Error('Event radio button not found');
+    
+    // Find the event radio button with retries
+    let radio = null;
+    const maxRetries = 3;
+    for (let retry = 0; retry < maxRetries; retry++) {
+      radio = await this._findRadioByText('event');
+      if (radio) {
+        const isVisible = await radio.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          break;
+        }
+      }
+      if (retry < maxRetries - 1) {
+        console.log(`ℹ️ Event radio button not found, retrying (attempt ${retry + 1}/${maxRetries})...`);
+        await this.page.waitForTimeout(1000);
+      }
+    }
+    
+    if (!radio) {
+      throw new Error('Event radio button not found after multiple attempts');
+    }
+    
     await radio.scrollIntoViewIfNeeded();
     await this.page.waitForTimeout(200);
     await radio.click({ force: true });
@@ -440,7 +504,6 @@ class SchedulingPage {
     await this.page.waitForTimeout(800); // Wait for radio selection to register and UI to update
     
     // Wait for Event Type dropdown to appear after selecting Event radio
-    const modal = this.modal();
     let dropdownAppeared = false;
     
     // Try multiple strategies to detect Event Type dropdown appearance
@@ -3920,34 +3983,6 @@ class SchedulingPage {
   }
 
   // Check if appointment type allows double booking
-  async checkIfAppointmentTypeAllowsDoubleBooking(appointmentType) {
-    console.log(`STEP: Checking if appointment type "${appointmentType}" allows double booking...`);
-    
-    // This would typically require checking the appointment type configuration
-    // For now, we'll try to find any indication in the UI or assume we need to test it
-    // Look for any checkbox or setting related to double booking
-    const doubleBookingSelectors = [
-      'input[type="checkbox"][id*="double" i]',
-      'input[type="checkbox"][id*="overlap" i]',
-      'label:has-text("double") input[type="checkbox"]',
-      'label:has-text("overlap") input[type="checkbox"]'
-    ];
-    
-    for (const selector of doubleBookingSelectors) {
-      const checkbox = this.page.locator(selector).first();
-      const isVisible = await checkbox.isVisible({ timeout: 2000 }).catch(() => false);
-      if (isVisible) {
-        const isChecked = await checkbox.isChecked({ timeout: 1000 }).catch(() => false);
-        console.log(`✓ Double booking setting found: ${isChecked ? 'Allowed' : 'Not Allowed'}`);
-        return isChecked;
-      }
-    }
-    
-    // Default: assume double booking is not allowed unless we can verify otherwise
-    console.log('ℹ️ Double booking setting not found in UI (may need to check configuration)');
-    return false;
-  }
-
   // Select appointment type
   async selectAppointmentType(appointmentType) {
     console.log(`STEP: Selecting appointment type: ${appointmentType}...`);
