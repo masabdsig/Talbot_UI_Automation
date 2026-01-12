@@ -1732,7 +1732,7 @@ class SchedulingPage {
         const lowerText = alertText.toLowerCase();
         if (lowerText.includes('deleted') || lowerText.includes('delete') || 
             lowerText.includes('success') || lowerText.includes('removed')) {
-          console.log(`✓ Delete success message found: ${alertText.trim()}`);
+          console.log(`✓ Delete success message found`);
           return true;
         }
       }

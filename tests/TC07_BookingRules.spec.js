@@ -30,26 +30,7 @@ test.describe('Scheduling Module - Booking Rules', () => {
     console.log('✓ ASSERT: Double-booking is allowed when appointment_type.allow_double_booking = true');
     
     // Verify both appointments are visible on scheduler
-    console.log('\n=== Verify both appointments are visible on scheduler ===');
-    await page.waitForTimeout(2000);
-    
-    // Find all events on scheduler
-    const allEventSelectors = [
-      '.e-event:not(button):not(.e-event-cancel):not(.e-event-save)',
-      '.e-appointment:not(button)',
-      '.e-schedule-event:not(button)'
-    ];
-    
-    let eventCount = 0;
-    for (const selector of allEventSelectors) {
-      const events = page.locator(selector);
-      const count = await events.count({ timeout: 3000 }).catch(() => 0);
-      if (count > 0) {
-        eventCount = count;
-        console.log(`ℹ️ Found ${eventCount} event(s) on scheduler`);
-        break;
-      }
-    }
+    const eventCount = await bookingRulesPage.countEventsOnScheduler();
     
     // Assert that at least 2 appointments are visible (first + overlapping)
     expect(eventCount).toBeGreaterThanOrEqual(2);
@@ -109,7 +90,10 @@ test.describe('Scheduling Module - Booking Rules', () => {
     const loginPage = new LoginPage(page);
     const bookingRulesPage = new BookingRulesPage(page);
 
-    await bookingRulesPage.setupSchedulerForNextDay(loginPage);
+    // Navigate to scheduling page (don't use setupSchedulerForNextDay - we'll go 90 days ahead first)
+    await bookingRulesPage.navigateToScheduling(loginPage);
+    await bookingRulesPage.waitForSchedulerLoaded();
+    
     await bookingRulesPage.testMaximumAdvanceBooking(90);
     
     console.log('\n✓ TEST COMPLETED: Maximum advance booking validation completed');
@@ -130,9 +114,9 @@ test.describe('Scheduling Module - Booking Rules', () => {
     const bookingRulesPage = new BookingRulesPage(page);
 
     await bookingRulesPage.setupSchedulerForNextDay(loginPage);
-    await bookingRulesPage.testDurationValidation('3:00 PM');
+    await bookingRulesPage.testDurationValidation();
     
-    console.log('\n✓ TEST COMPLETED: Appointment duration validation completed');
+    console.log('\n✓ TEST COMPLETED: Appointment positive duration validation completed');
   });
 
   test('TC58. End time must be after start time', async ({ page }) => {

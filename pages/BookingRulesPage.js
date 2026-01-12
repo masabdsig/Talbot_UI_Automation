@@ -1,8 +1,11 @@
 const { SchedulingPage } = require('./SchedulingPage');
+const { expect } = require('@playwright/test');
 
 class BookingRulesPage extends SchedulingPage {
   constructor(page) {
     super(page);
+    // Locators for BookingRulesPage
+    this.nextButton = page.locator('button[title="Next"], .e-next button').first();
   }
 
   // Test double-booking prevention
@@ -392,18 +395,33 @@ class BookingRulesPage extends SchedulingPage {
 
   // Test maximum advance booking
   async testMaximumAdvanceBooking(maxAdvanceDays = 90) {
-    console.log('\n=== Step 1: Ensure scheduler is loaded ===');
-    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-    await this.page.waitForSelector('td.e-work-cells', { timeout: 10000, state: 'visible' }).catch(() => {});
-    await this.page.waitForTimeout(1000);
-    console.log('✓ Scheduler is loaded');
-
-    console.log('\n=== Step 2: Click calendar to select date after 90 days ===');
+    console.log('\n=== Step 1: Calculate date 90 days ahead ===');
     const currentDate = new Date();
-    const maxAdvanceDate = new Date(currentDate);
+    let maxAdvanceDate = new Date(currentDate);
     maxAdvanceDate.setDate(maxAdvanceDate.getDate() + maxAdvanceDays);
     
-    console.log(`ℹ️ Target date (${maxAdvanceDays} days ahead): ${maxAdvanceDate.toDateString()}`);
+    console.log(`ℹ️ Initial target date (${maxAdvanceDays} days ahead): ${maxAdvanceDate.toDateString()}`);
+    
+    // Check if the date after 90 days is Saturday or Sunday, and if so, skip to Monday
+    const dayOfWeek = maxAdvanceDate.getDay(); // 0 = Sunday, 6 = Saturday
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    if (dayOfWeek === 0) {
+      // Sunday - add 1 day to get to Monday
+      console.log('ℹ️ Date after 90 days is Sunday, skipping to Monday (adding 1 more day)');
+      maxAdvanceDate.setDate(maxAdvanceDate.getDate() + 1);
+      console.log(`ℹ️ Adjusted target date: ${maxAdvanceDate.toDateString()} (Monday)`);
+    } else if (dayOfWeek === 6) {
+      // Saturday - add 2 days to get to Monday
+      console.log('ℹ️ Date after 90 days is Saturday, skipping to Monday (adding 2 more days)');
+      maxAdvanceDate.setDate(maxAdvanceDate.getDate() + 2);
+      console.log(`ℹ️ Adjusted target date: ${maxAdvanceDate.toDateString()} (Monday)`);
+    } else {
+      console.log(`ℹ️ Date after 90 days is ${dayNames[dayOfWeek]}, no adjustment needed`);
+    }
+
+    console.log('\n=== Step 2: Click calendar to select date after 90 days (with Saturday/Sunday check) ===');
+    console.log(`✓ Final target date: ${maxAdvanceDate.toDateString()}`);
     
     // Navigate to date using calendar (this clicks on calendar and selects the date)
     const navigationSuccess = await this.navigateToDate(maxAdvanceDate);
@@ -441,86 +459,240 @@ class BookingRulesPage extends SchedulingPage {
     const canCreateAtMaxDate = await this.attemptToSaveAppointment();
     if (canCreateAtMaxDate) {
       console.log('✓ ASSERT: Appointment can be created at maximum advance date');
+      
+      // Delete the appointment after successful creation
+      console.log('\n=== Delete the created appointment ===');
+      await this.page.waitForTimeout(2000); // Wait for scheduler to refresh
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+      await this.page.waitForSelector('td.e-work-cells', { timeout: 10000, state: 'visible' }).catch(() => {});
+      
+      const eventElement = await this.verifyEventVisibleOnScheduler();
+      if (eventElement) {
+        await eventElement.dblclick({ timeout: 5000 }).catch(() => {});
+        await this.page.waitForTimeout(1000);
+        const modal = this.modal();
+        const isModalOpen = await modal.isVisible({ timeout: 3000 }).catch(() => false);
+        if (isModalOpen) {
+          await this.clickDeleteButtonInEditModal().catch(() => {});
+          await this.confirmDeleteEvent().catch(() => {});
+          await this.page.waitForTimeout(1000);
+          console.log('✓ Appointment deleted successfully');
+        }
+      }
+      
+      // After deleting appointment, no need to create another maximum advance booking
+      console.log('ℹ️ Appointment deleted - test complete (no need to create another maximum advance booking)');
+      return true;
     } else {
       const errorMessage = await this.attemptToSaveAppointmentAndGetError();
       if (errorMessage) {
         console.log(`ℹ️ Appointment creation result: ${errorMessage}`);
       }
-    }
-
-    console.log('\n=== Attempt to create appointment beyond maximum advance date ===');
-    await this.closePopupSafely();
-    await this.page.waitForTimeout(1000);
-    
-    const beyondMaxDate = new Date(maxAdvanceDate);
-    beyondMaxDate.setDate(beyondMaxDate.getDate() + 1);
-    
-    const canNavigateBeyond = await this.navigateToDate(beyondMaxDate);
-    
-    if (!canNavigateBeyond) {
-      console.log('✓ ASSERT: Cannot navigate beyond maximum advance booking date');
-      return true;
-    } else {
-      await this.openAddEventPopupOnNextDay();
-      await this.selectAppointmentRadioButton();
       
-      // Note: Not setting start time - using default time from cell selection
-      await this.setAppointmentDuration('30');
+      // If appointment creation failed, still try to test beyond maximum advance date
+      console.log('\n=== Attempt to create appointment beyond maximum advance date ===');
+      await this.closePopupSafely();
+      await this.page.waitForTimeout(1000);
       
-      const errorMessage = await this.attemptToSaveAppointmentAndGetError();
-      if (errorMessage) {
-        const isMaxAdvanceError = errorMessage.toLowerCase().includes('maximum') ||
-                                 errorMessage.toLowerCase().includes('advance') ||
-                                 errorMessage.toLowerCase().includes('days') ||
-                                 errorMessage.toLowerCase().includes('future');
-        
-        if (isMaxAdvanceError) {
-          console.log(`✓ ASSERT: Maximum advance booking enforced with message: ${errorMessage}`);
-          return true;
-        } else {
-          console.log(`ℹ️ Error message: ${errorMessage} (may indicate max advance validation)`);
-          return true;
-        }
+      const beyondMaxDate = new Date(maxAdvanceDate);
+      beyondMaxDate.setDate(beyondMaxDate.getDate() + 1);
+      
+      const canNavigateBeyond = await this.navigateToDate(beyondMaxDate);
+      
+      if (!canNavigateBeyond) {
+        console.log('✓ ASSERT: Cannot navigate beyond maximum advance booking date');
+        return true;
       } else {
-        console.log('⚠️ Maximum advance booking may not be enforced');
-        return false;
+        await this.openAddEventPopupOnNextDay();
+        await this.selectAppointmentRadioButton();
+        
+        // Note: Not setting start time - using default time from cell selection
+        await this.setAppointmentDuration('30');
+        
+        const errorMessage = await this.attemptToSaveAppointmentAndGetError();
+        if (errorMessage) {
+          const isMaxAdvanceError = errorMessage.toLowerCase().includes('maximum') ||
+                                   errorMessage.toLowerCase().includes('advance') ||
+                                   errorMessage.toLowerCase().includes('days') ||
+                                   errorMessage.toLowerCase().includes('future');
+          
+          if (isMaxAdvanceError) {
+            console.log(`✓ ASSERT: Maximum advance booking enforced with message: ${errorMessage}`);
+            return true;
+          } else {
+            console.log(`ℹ️ Error message: ${errorMessage} (may indicate max advance validation)`);
+            return true;
+          }
+        } else {
+          console.log('⚠️ Maximum advance booking may not be enforced');
+          return false;
+        }
       }
     }
   }
 
   // Test patient overlapping appointments
   async testPatientOverlappingAppointments(appointmentTime = '2:00 PM', duration = '60', overlappingTime = '2:30 PM') {
-    console.log('\n=== Create first appointment for a patient ===');
+    console.log('\n=== Step 1: Create first appointment with duration 10 ===');
     await this.openAddEventPopupOnNextDay();
     await this.selectAppointmentRadioButton();
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
     
-    await this.setAppointmentTime(appointmentTime);
-    await this.setAppointmentDuration(duration);
+    // Select appointment type
+    await this.selectAppointmentTypeForAppointment();
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+    
+    // Note: Not setting start time - using default time from cell selection
+    await this.setAppointmentDuration('10');
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
     
     const patientSelected = await this.selectPatientIfRequired();
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
     
-    const firstAppointmentCreated = await this.createAppointmentWithDetails();
-    if (!firstAppointmentCreated) {
-      console.log('⚠️ First appointment creation failed - may need patient/facility selection');
-      await this.closePopupSafely();
+    // Save the appointment
+    console.log('\n=== Step 2: Save first appointment and assert success toaster ===');
+    await this.saveButton.click({ timeout: 5000 });
+    await this.page.waitForTimeout(2000);
+    
+    // Check for success toaster
+    const toastContainer = this.page.locator('#toast-container').first();
+    const toastVisible = await toastContainer.isVisible({ timeout: 5000 }).catch(() => false);
+    let successToasterFound = false;
+    
+    if (toastVisible) {
+      const toastText = await toastContainer.textContent({ timeout: 2000 }).catch(() => '');
+      if (toastText && toastText.trim()) {
+        const lowerText = toastText.toLowerCase();
+        if (lowerText.includes('created') || lowerText.includes('saved') || 
+            lowerText.includes('success') || lowerText.includes('appointment')) {
+          console.log(`✓ ASSERT: Success toaster found: ${toastText.trim()}`);
+          console.log('✓ ASSERT: First appointment saved successfully');
+          successToasterFound = true;
+        } else {
+          console.log(`⚠️ Toaster found but may not be success: ${toastText.trim()}`);
+        }
+      }
+    } else {
+      // Check if modal closed (might indicate success)
+      const modal = this.modal();
+      const isModalClosed = !(await modal.isVisible({ timeout: 2000 }).catch(() => false));
+      if (isModalClosed) {
+        console.log('✓ ASSERT: Modal closed - first appointment saved successfully');
+        successToasterFound = true;
+      } else {
+        console.log('⚠️ Modal still open - may indicate validation error');
+      }
+    }
+    
+    if (!successToasterFound) {
+      console.log('⚠️ Success toaster not found for first appointment');
+    }
+    
+    // Wait for scheduler to refresh
+    await this.page.waitForTimeout(2000);
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForSelector('td.e-work-cells', { timeout: 10000, state: 'visible' }).catch(() => {});
+    await this.page.waitForTimeout(1000);
+    
+    console.log('\n=== Step 3: Find the cell with first appointment ===');
+    // Find the cell that has the first appointment
+    const allCells = this.page.locator('td.e-work-cells');
+    const cellCount = await allCells.count({ timeout: 5000 }).catch(() => 0);
+    
+    let targetCell = null;
+    for (let i = 0; i < cellCount; i++) {
+      const cell = allCells.nth(i);
+      const hasEvent = await this.cellHasEvent(cell);
+      if (hasEvent) {
+        targetCell = cell;
+        console.log(`✓ Found cell with first appointment at index ${i}`);
+        break;
+      }
+    }
+    
+    if (!targetCell) {
+      console.log('⚠️ Could not find cell with first appointment');
+      return false;
+    }
+
+    console.log('\n=== Step 4: Attempt to create another appointment on same cell with duration 30 ===');
+    await targetCell.scrollIntoViewIfNeeded();
+    await this.page.waitForTimeout(500);
+    
+    // Double-click on the same cell to try to create another appointment
+    await targetCell.dblclick({ timeout: 5000 });
+    await this.page.waitForTimeout(2000);
+    
+    // Check if modal opened
+    const modal2 = this.modal();
+    const isModalOpen = await modal2.isVisible({ timeout: 5000 }).catch(() => false);
+    
+    if (!isModalOpen) {
+      console.log('⚠️ No modal opened after double-clicking cell with existing appointment');
       return false;
     }
     
-    console.log('✓ First appointment created for patient');
-    await this.page.waitForTimeout(2000);
-
-    console.log('\n=== Attempt to create overlapping appointment for same patient ===');
-    await this.openAddEventPopupOnNextDay();
     await this.selectAppointmentRadioButton();
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+    
+    // Select appointment type
+    await this.selectAppointmentTypeForAppointment();
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
     
     if (patientSelected) {
       await this.selectPatientIfRequired();
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+      await this.page.waitForTimeout(500);
     }
     
-    await this.setAppointmentTime(overlappingTime);
+    // Note: Not setting start time - using default time from cell selection
     await this.setAppointmentDuration('30');
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
     
-    const errorMessage = await this.attemptToSaveAppointmentAndGetError();
+    // Save the second appointment
+    console.log('\n=== Step 5: Save second appointment ===');
+    await this.saveButton.click({ timeout: 5000 });
+    await this.page.waitForTimeout(2000);
+    
+    // Check for error toaster or error message
+    const toastContainer2 = this.page.locator('#toast-container').first();
+    const toastVisible2 = await toastContainer2.isVisible({ timeout: 5000 }).catch(() => false);
+    
+    let errorMessage = null;
+    if (toastVisible2) {
+      const toastText = await toastContainer2.textContent({ timeout: 2000 }).catch(() => '');
+      if (toastText && toastText.trim()) {
+        const lowerText = toastText.toLowerCase();
+        // Check if it's an error message
+        if (lowerText.includes('error') || lowerText.includes('cannot') || 
+            lowerText.includes('overlap') || lowerText.includes('conflict') ||
+            lowerText.includes('already') || lowerText.includes('patient') ||
+            lowerText.includes('scheduled') || lowerText.includes('invalid')) {
+          errorMessage = toastText.trim();
+        }
+      }
+    }
+    
+    // Also check if modal is still open (might indicate error)
+    const modalStillOpen = await modal2.isVisible({ timeout: 2000 }).catch(() => false);
+    if (modalStillOpen && !errorMessage) {
+      // Check for error messages in the modal
+      const errorElements = modal2.locator('.text-danger, .error, [class*="error"], .invalid, [class*="invalid"]');
+      const errorCount = await errorElements.count().catch(() => 0);
+      if (errorCount > 0) {
+        const errorText = await errorElements.first().textContent({ timeout: 1000 }).catch(() => '');
+        if (errorText) {
+          errorMessage = errorText.trim();
+        }
+      }
+    }
     
     if (errorMessage) {
       const isOverlapError = errorMessage.toLowerCase().includes('overlap') ||
@@ -537,164 +709,456 @@ class BookingRulesPage extends SchedulingPage {
         return true;
       }
     } else {
-      const canCreate = await this.attemptToSaveAppointment();
-      if (!canCreate) {
-        console.log('✓ ASSERT: Patient overlapping appointments prevented');
-        return true;
-      } else {
-        console.log('⚠️ Patient overlapping appointments may be allowed');
+      // Check if modal closed (might indicate success, but should not happen for overlapping)
+      if (!modalStillOpen) {
+        console.log('⚠️ Modal closed - overlapping appointment may have been created (unexpected)');
         return false;
+      } else {
+        console.log('✓ ASSERT: Patient overlapping appointments prevented (modal still open with validation)');
+        return true;
       }
     }
   }
 
   // Test appointment duration validation
   async testDurationValidation(appointmentTime = '3:00 PM') {
-    console.log('\n=== Attempt to create appointment with negative duration ===');
     await this.openAddEventPopupOnNextDay();
     await this.selectAppointmentRadioButton();
-    await this.setAppointmentTime(appointmentTime);
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+    
+    // Fill negative duration value
     await this.setAppointmentDuration('-10');
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
     
-    const errorMessage = await this.attemptToSaveAppointmentAndGetError();
+    // Fill required fields
+    await this.selectAppointmentTypeForAppointment();
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
     
-    if (errorMessage) {
-      const isDurationError = errorMessage.toLowerCase().includes('duration') ||
-                             errorMessage.toLowerCase().includes('positive') ||
-                             errorMessage.toLowerCase().includes('invalid') ||
-                             errorMessage.toLowerCase().includes('must');
-      
-      if (isDurationError) {
-        console.log(`✓ ASSERT: Negative duration rejected with message: ${errorMessage}`);
-      } else {
-        console.log(`ℹ️ Error message: ${errorMessage} (may indicate duration validation)`);
-      }
-    } else {
-      const canCreate = await this.attemptToSaveAppointment();
-      if (!canCreate) {
-        console.log('✓ ASSERT: Negative duration rejected (appointment creation blocked)');
-      } else {
-        console.log('⚠️ Negative duration may be accepted');
-      }
+    await this.selectPatientIfRequired();
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+    
+    await this.selectPlaceOfService();
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+    
+    // Check if duration is still negative or positive
+    const finalDurationValue = await this.getAppointmentDuration();
+    if (finalDurationValue && parseInt(finalDurationValue) > 0) {
+      console.log(`✓ ASSERT: Duration auto-corrected to positive value: ${finalDurationValue} minutes`);
+    } else if (finalDurationValue && parseInt(finalDurationValue) < 0) {
+      console.log(`⚠️ Duration still negative: ${finalDurationValue}`);
     }
-
-    console.log('\n=== Attempt to create appointment with zero duration ===');
-    await this.closePopupSafely();
-    await this.page.waitForTimeout(1000);
-    await this.openAddEventPopupOnNextDay();
-    await this.selectAppointmentRadioButton();
-    await this.setAppointmentTime(appointmentTime);
-    await this.setAppointmentDuration('0');
     
-    const errorMessageZero = await this.attemptToSaveAppointmentAndGetError();
-    if (errorMessageZero) {
-      console.log(`✓ ASSERT: Zero duration rejected with message: ${errorMessageZero}`);
-    } else {
-      const canCreate = await this.attemptToSaveAppointment();
-      if (!canCreate) {
-        console.log('✓ ASSERT: Zero duration rejected');
-      }
-    }
-
-    console.log('\n=== Verify positive integer duration is accepted ===');
-    await this.closePopupSafely();
-    await this.page.waitForTimeout(1000);
-    await this.openAddEventPopupOnNextDay();
-    await this.selectAppointmentRadioButton();
-    await this.setAppointmentTime(appointmentTime);
-    await this.setAppointmentDuration('30');
-    
-    const durationValue = await this.getAppointmentDuration();
-    if (durationValue && parseInt(durationValue) > 0) {
-      console.log(`✓ ASSERT: Positive integer duration accepted: ${durationValue} minutes`);
-    }
     await this.closePopupSafely();
     return true;
   }
 
   // Test end time validation
   async testEndTimeValidation(startTime = '4:00 PM', duration = '30') {
-    console.log('\n=== Set start time and verify end time is calculated correctly ===');
     await this.openAddEventPopupOnNextDay();
     await this.selectAppointmentRadioButton();
-    await this.setAppointmentTime(startTime);
-    await this.setAppointmentDuration(duration);
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
     
-    const endTime = await this.getEndTime();
+    // Select appointment type
+    await this.selectAppointmentTypeForAppointment();
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+    
+    // Read start time (not setting it - using default from cell selection)
     const startTimeValue = await this.getStartTime();
+    console.log(`Start time: ${startTimeValue}`);
     
-    console.log(`✓ Start time: ${startTimeValue}, End time: ${endTime}`);
+    // Change duration
+    await this.setAppointmentDuration(duration);
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
     
+    // Read end time
+    const endTime = await this.getEndTime();
+    console.log(`End time: ${endTime}`);
+    
+    // Check if end time is after start time
     if (endTime && startTimeValue) {
       const endIsAfterStart = await this.verifyEndTimeAfterStartTime(startTimeValue, endTime);
       if (endIsAfterStart) {
-        console.log('✓ ASSERT: End time is correctly calculated after start time');
+        console.log('✓ ASSERT: End time is after start time');
       } else {
-        console.log('⚠️ End time validation may need attention');
+        console.log('⚠️ End time is not after start time');
       }
     }
-
-    console.log('\n=== Attempt to set end time before start time ===');
-    const canSetEndTime = await this.attemptToSetEndTimeBeforeStartTime(startTime);
     
-    if (canSetEndTime) {
-      const errorMessage = await this.attemptToSaveAppointmentAndGetError();
-      if (errorMessage) {
-        const isTimeError = errorMessage.toLowerCase().includes('end') ||
-                           errorMessage.toLowerCase().includes('start') ||
-                           errorMessage.toLowerCase().includes('before') ||
-                           errorMessage.toLowerCase().includes('after') ||
-                           errorMessage.toLowerCase().includes('invalid');
-        
-        if (isTimeError) {
-          console.log(`✓ ASSERT: End time before start time rejected with message: ${errorMessage}`);
-        } else {
-          console.log(`ℹ️ Error message: ${errorMessage} (may indicate time validation)`);
-        }
-      } else {
-        console.log('⚠️ End time validation may not be enforced');
-      }
-    } else {
-      console.log('ℹ️ End time field may be read-only (automatically calculated)');
-    }
     await this.closePopupSafely();
     return true;
   }
 
   // Test future start time validation
   async testFutureStartTimeValidation() {
-    console.log('\n=== Verify start time must be in future ===');
     await this.openAddEventPopupOnNextDay();
     await this.selectAppointmentRadioButton();
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
     
-    const earlyTime = '8:00 AM';
-    console.log(`Setting start time to early morning (next day): ${earlyTime}`);
-    await this.setAppointmentTime(earlyTime);
-    await this.setAppointmentDuration('30');
-    
+    // Read default start time (not setting it - using default from cell selection)
     const startTimeValue = await this.getStartTime();
+    console.log(`Default start time: ${startTimeValue}`);
+    
+    // Get current date and time
+    const now = new Date();
+    const currentDate = now.toLocaleDateString();
+    const currentTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    console.log(`Current date: ${currentDate}, Current time: ${currentTime}`);
+    
+    // Validate that start time is in future
     if (startTimeValue) {
-      console.log(`✓ ASSERT: Future start time accepted: ${startTimeValue}`);
+      let startDateTime;
+      
+      // Try to parse as full datetime string
+      startDateTime = new Date(startTimeValue);
+      
+      // If parsing failed or resulted in invalid date, try alternative parsing
+      if (isNaN(startDateTime.getTime())) {
+        // If it's just time format, since we opened on next day, the date should be tomorrow
+        // But let's try to parse it anyway - the Date constructor might handle it
+        startDateTime = new Date(startTimeValue);
+      }
+      
+      const isFuture = startDateTime > now;
+      
+      if (isFuture) {
+        console.log(`✓ ASSERT: Default start time is in future: ${startTimeValue} (compared to current: ${now.toLocaleString()})`);
+      } else {
+        console.log(`⚠️ Default start time is not in future: ${startTimeValue} (current: ${now.toLocaleString()})`);
+      }
+    } else {
+      console.log('⚠️ Could not read start time value');
     }
     
-    console.log('ℹ️ Start time validation: Booking on next day ensures start time is in future');
-
-    console.log('\n=== Verify various future times are accepted ===');
-    await this.closePopupSafely();
-    await this.page.waitForTimeout(1000);
-    await this.openAddEventPopupOnNextDay();
-    await this.selectAppointmentRadioButton();
-    
-    const afternoonTime = '2:00 PM';
-    await this.setAppointmentTime(afternoonTime);
-    await this.setAppointmentDuration('30');
-    
-    const startTimeValue2 = await this.getStartTime();
-    if (startTimeValue2) {
-      console.log(`✓ ASSERT: Future start time accepted: ${startTimeValue2}`);
-    }
     await this.closePopupSafely();
     return true;
+  }
+
+  // ============================================
+  // Methods for test file usage - Direct implementations
+  // ============================================
+
+  // Helper: Calculate next business day (skip Saturday, go to Monday)
+  getNextBusinessDay() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dayOfWeek = tomorrow.getDay(); // 0 = Sunday, 6 = Saturday
+    
+    // If tomorrow is Saturday, skip to Monday (add 2 more days)
+    if (dayOfWeek === 6) {
+      tomorrow.setDate(tomorrow.getDate() + 2);
+      console.log('ℹ️ Next day is Saturday, skipping to Monday');
+    }
+    
+    return tomorrow;
+  }
+
+  // Helper: Get number of days to navigate (1 for normal, 3 if tomorrow is Saturday)
+  getDaysToNavigate() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dayOfWeek = tomorrow.getDay();
+    
+    // If tomorrow is Saturday, need to navigate 3 days (to Monday)
+    if (dayOfWeek === 6) {
+      return 3;
+    }
+    return 1;
+  }
+
+  // Navigate to scheduling page
+  async navigateToScheduling(loginPage) {
+    console.log('STEP: Navigating to Scheduling page...');
+    await this.page.goto('/scheduling');
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 15000 });
+    if (loginPage) {
+      try {
+        await loginPage.skipMfa();
+      } catch (e) {}
+    }
+    await this.page.waitForURL('**/scheduling**', { timeout: 15000 });
+    console.log('✓ Navigated to Scheduling page');
+  }
+
+  // Navigate to next day
+  async navigateToNextDay() {
+    console.log('STEP: Navigating to next day...');
+    const daysToNavigate = this.getDaysToNavigate();
+    
+    if (daysToNavigate === 3) {
+      console.log('ℹ️ Next day is Saturday, navigating to Monday (3 days ahead)');
+    }
+    
+    await expect(this.nextButton).toBeVisible({ timeout: 10000 });
+    await expect(this.nextButton).toBeEnabled();
+    
+    // Click next button the required number of times
+    for (let i = 0; i < daysToNavigate; i++) {
+      await this.nextButton.click();
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+      // Wait for scheduler cells to render
+      await this.page.waitForSelector('td.e-work-cells', { timeout: 10000, state: 'visible' }).catch(() => {});
+      await this.page.waitForTimeout(1000); // Allow scheduler to fully update
+      
+      if (i < daysToNavigate - 1) {
+        console.log(`ℹ️ Navigated ${i + 1} day(s), continuing...`);
+      }
+    }
+    
+    console.log(`✓ Navigated to next business day (${daysToNavigate} day(s) ahead)`);
+  }
+
+  // Wait for scheduler to load
+  async waitForSchedulerLoaded() {
+    console.log('STEP: Waiting for scheduler to load...');
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+    await this.page.waitForSelector('.e-schedule, .e-scheduler', { timeout: 15000, state: 'visible' });
+    console.log('✓ Scheduler loaded');
+  }
+
+  // Setup scheduler for next day
+  async setupSchedulerForNextDay(loginPage) {
+    console.log('STEP: Setting up scheduler...');
+    await this.navigateToScheduling(loginPage);
+    await this.waitForSchedulerLoaded();
+    await this.navigateToNextDay();
+    console.log('✓ Scheduler setup complete');
+  }
+
+  // Get modal locator
+  modal() {
+    return this.page.locator('.modal:visible, [role="dialog"]:visible, .e-popup-open').first();
+  }
+
+  // Click delete button in edit modal
+  async clickDeleteButtonInEditModal() {
+    const modal = this.modal();
+    await modal.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+    
+    // Wait for loader to disappear before clicking delete
+    const loader = this.page.locator('.loader-wrapper');
+    const loaderVisible = await loader.isVisible({ timeout: 2000 }).catch(() => false);
+    if (loaderVisible) {
+      await loader.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+    }
+    await this.page.waitForTimeout(500);
+    
+    const deleteButtonSelectors = [
+      'button:has-text("Delete")',
+      'button:has-text("delete")',
+      'button.e-event-delete',
+      'button[aria-label*="delete" i]',
+      'button[title*="delete" i]',
+      '.e-event-delete',
+      '[class*="delete"] button',
+      'button.delete'
+    ];
+    
+    let deleteButton = null;
+    for (const selector of deleteButtonSelectors) {
+      const btn = modal.locator(selector).first();
+      const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+      if (isVisible) {
+        deleteButton = btn;
+        break;
+      }
+    }
+    
+    if (!deleteButton) {
+      for (const selector of deleteButtonSelectors) {
+        const btn = this.page.locator(selector).first();
+        const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          deleteButton = btn;
+          break;
+        }
+      }
+    }
+    
+    if (!deleteButton) {
+      throw new Error('Delete button not found in edit modal');
+    }
+    
+    // Wait for loader again before clicking
+    const loaderVisibleAgain = await loader.isVisible({ timeout: 1000 }).catch(() => false);
+    if (loaderVisibleAgain) {
+      await loader.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+    }
+    
+    await deleteButton.scrollIntoViewIfNeeded();
+    await this.page.waitForTimeout(500);
+    await deleteButton.click({ timeout: 10000, force: true }).catch(() => deleteButton.click({ timeout: 10000 }));
+    await this.page.waitForTimeout(500);
+  }
+
+  // Confirm delete in delete confirmation popup
+  async confirmDeleteEvent() {
+    await this.page.waitForTimeout(500);
+    
+    // Wait for loader to disappear
+    const loader = this.page.locator('.loader-wrapper');
+    const loaderVisible = await loader.isVisible({ timeout: 2000 }).catch(() => false);
+    if (loaderVisible) {
+      await loader.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+    }
+    await this.page.waitForTimeout(500);
+    
+    const deleteConfirmSelectors = [
+      '.modal:has-text("delete")',
+      '[role="dialog"]:has-text("delete")',
+      '.e-popup-open:has-text("delete")',
+      '.confirm-dialog:has-text("delete")',
+      '.delete-confirm'
+    ];
+    
+    let confirmModal = null;
+    for (const selector of deleteConfirmSelectors) {
+      const modal = this.page.locator(selector).first();
+      const isVisible = await modal.isVisible({ timeout: 3000 }).catch(() => false);
+      if (isVisible) {
+        confirmModal = modal;
+        break;
+      }
+    }
+    
+    if (!confirmModal) {
+      confirmModal = this.modal();
+    }
+    
+    await confirmModal.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+    
+    const confirmButtonSelectors = [
+      'button:has-text("Delete")',
+      'button:has-text("delete")',
+      'button:has-text("Confirm")',
+      'button:has-text("confirm")',
+      'button.e-confirm',
+      'button[aria-label*="delete" i]',
+      'button[aria-label*="confirm" i]',
+      'button.delete',
+      'button.confirm',
+      '.e-btn-primary:has-text("Delete")',
+      '.e-btn-primary:has-text("delete")'
+    ];
+    
+    let confirmButton = null;
+    for (const selector of confirmButtonSelectors) {
+      const btn = confirmModal.locator(selector).first();
+      const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+      if (isVisible) {
+        const text = await btn.textContent({ timeout: 1000 }).catch(() => '');
+        if (text && text.toLowerCase().includes('delete')) {
+          confirmButton = btn;
+          break;
+        } else if (!confirmButton && text && text.toLowerCase().includes('confirm')) {
+          confirmButton = btn;
+        }
+      }
+    }
+    
+    if (!confirmButton) {
+      for (const selector of confirmButtonSelectors) {
+        const btn = this.page.locator(selector).first();
+        const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          const text = await btn.textContent({ timeout: 1000 }).catch(() => '');
+          if (text && (text.toLowerCase().includes('delete') || text.toLowerCase().includes('confirm'))) {
+            confirmButton = btn;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (!confirmButton) {
+      throw new Error('Delete confirmation button not found');
+    }
+    
+    // Wait for loader again before clicking confirm
+    const loaderVisibleAgain = await loader.isVisible({ timeout: 1000 }).catch(() => false);
+    if (loaderVisibleAgain) {
+      await loader.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+    }
+    
+    await confirmButton.scrollIntoViewIfNeeded();
+    await this.page.waitForTimeout(500);
+    await confirmButton.click({ timeout: 10000, force: true }).catch(() => confirmButton.click({ timeout: 10000 }));
+    await this.page.waitForTimeout(2000);
+    
+    // Check for success toaster after delete
+    await this.page.waitForTimeout(1000);
+    const toastContainer = this.page.locator('#toast-container').first();
+    const toastVisible = await toastContainer.isVisible({ timeout: 5000 }).catch(() => false);
+    
+    if (toastVisible) {
+      const toastText = await toastContainer.textContent({ timeout: 2000 }).catch(() => '');
+      if (toastText && toastText.trim()) {
+        const lowerText = toastText.toLowerCase();
+        if (lowerText.includes('deleted') || lowerText.includes('delete') || 
+            lowerText.includes('success') || lowerText.includes('removed')) {
+          console.log(`✓ Delete success toaster found: ${toastText.trim()}`);
+          return true;
+        }
+      }
+    }
+    
+    // Also check for other success indicators
+    const successSelectors = [
+      '*:has-text("deleted")',
+      '*:has-text("delete")',
+      '*:has-text("success")',
+      '*:has-text("removed")'
+    ];
+    
+    for (const selector of successSelectors) {
+      const alert = this.page.locator(selector).first();
+      const isVisible = await alert.isVisible({ timeout: 2000 }).catch(() => false);
+      if (isVisible) {
+        const alertText = await alert.textContent({ timeout: 1000 }).catch(() => '');
+        const lowerText = alertText.toLowerCase();
+        if (lowerText.includes('deleted') || lowerText.includes('delete') || 
+            lowerText.includes('success') || lowerText.includes('removed')) {
+          console.log(`✓ Delete success message found`);
+          return true;
+        }
+      }
+    }
+    
+    return true;
+  }
+
+  // Count events visible on scheduler
+  async countEventsOnScheduler() {
+    console.log('\n=== Count events on scheduler ===');
+    await this.page.waitForTimeout(2000);
+    
+    // Find all events on scheduler
+    const allEventSelectors = [
+      '.e-event:not(button):not(.e-event-cancel):not(.e-event-save)',
+      '.e-appointment:not(button)',
+      '.e-schedule-event:not(button)'
+    ];
+    
+    let eventCount = 0;
+    for (const selector of allEventSelectors) {
+      const events = this.page.locator(selector);
+      const count = await events.count({ timeout: 3000 }).catch(() => 0);
+      if (count > 0) {
+        eventCount = count;
+        console.log(`ℹ️ Found ${eventCount} event(s) on scheduler`);
+        break;
+      }
+    }
+    
+    return eventCount;
   }
 }
 

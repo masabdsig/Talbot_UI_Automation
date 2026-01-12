@@ -40,7 +40,8 @@ export class DashboardLocators {
             "Personnel File Checklist",
             "Set-up Online Appointments",
             "Set-up Dosespot PIN",
-            "TFA/Dual Mobile Activation"
+            "TFA/Dual Mobile Activation",
+            "Provider Profile Picture"
         ];
 
         // Left menu locators - menu items are in .list-group within the modal
