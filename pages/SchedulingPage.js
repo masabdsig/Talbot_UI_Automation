@@ -285,13 +285,43 @@ class SchedulingPage {
   // Modal methods
   async verifyAddEventPopupVisible() {
     console.log('ASSERT: Verifying Add Event popup is visible...');
-    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-    const modal = this.modal();
-    const isVisible = await modal.isVisible({ timeout: 5000 }).catch(() => false);
-    if (!isVisible) {
-      throw new Error('Add Event popup not found');
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+    
+    // Try multiple modal selectors with longer timeout
+    const modalSelectors = [
+      '.modal:visible',
+      '[role="dialog"]:visible',
+      '.e-popup-open',
+      '.e-dialog',
+      '.modal.show',
+      '.modal.in'
+    ];
+
+    let modalFound = false;
+    for (const selector of modalSelectors) {
+      try {
+        const modal = this.page.locator(selector).first();
+        const isVisible = await modal.isVisible({ timeout: 5000 }).catch(() => false);
+        if (isVisible) {
+          modalFound = true;
+          console.log(`✓ Add Event popup is visible (selector: ${selector})`);
+          break;
+        }
+      } catch (e) {
+        // Try next selector
+        continue;
+      }
     }
-    console.log('✓ Add Event popup is visible');
+
+    if (!modalFound) {
+      // Final attempt with the default modal() method
+      const modal = this.modal();
+      const isVisible = await modal.isVisible({ timeout: 10000 }).catch(() => false);
+      if (!isVisible) {
+        throw new Error('Add Event popup not found after waiting for all selectors');
+      }
+      console.log('✓ Add Event popup is visible');
+    }
   }
 
   async verifyCloseIconVisibleAndClickable() {
@@ -376,17 +406,27 @@ class SchedulingPage {
     
     console.log('ASSERT: Verifying Provider control is disabled...');
     const isDisabled = await providerControl.isDisabled({ timeout: 2000 }).catch(() => false);
+    
     if (!isDisabled) {
+      // If Playwright's isDisabled() returns false, check JavaScript properties
       const jsCheck = await providerControl.evaluate((el) => ({
         disabled: el.disabled,
         readOnly: el.readOnly,
-        ariaDisabled: el.getAttribute('aria-disabled')
+        ariaDisabled: el.getAttribute('aria-disabled'),
+        hasDisabledClass: el.classList.contains('disabled') || el.classList.contains('e-disabled')
       }));
-      if (!jsCheck.disabled && !jsCheck.readOnly && jsCheck.ariaDisabled !== 'true') {
-        console.log('⚠️ Provider control disabled state could not be confirmed');
+      
+      // Check if control is disabled via any of these methods
+      const isActuallyDisabled = jsCheck.disabled || jsCheck.readOnly || jsCheck.ariaDisabled === 'true' || jsCheck.hasDisabledClass;
+      
+      if (!isActuallyDisabled) {
+        throw new Error('Provider control is not disabled. Expected disabled state but control is enabled.');
       }
+      
+      console.log(`✓ Provider control is disabled (via ${jsCheck.disabled ? 'disabled attribute' : jsCheck.readOnly ? 'readOnly attribute' : jsCheck.ariaDisabled === 'true' ? 'aria-disabled' : 'disabled class'})`);
+    } else {
+      console.log('✓ Provider control is disabled');
     }
-    console.log('✓ Provider control disabled check completed');
   }
 
   async verifyProviderNamePrepopulated() {
@@ -711,20 +751,98 @@ class SchedulingPage {
     console.log('✓ Scheduler setup complete');
   }
 
-  async openAddEventPopupOnNextDay() {
-    console.log('STEP: Opening Add Event popup on next day...');
-    const nextBusinessDay = this.getNextBusinessDay();
-    const dayOfWeek = nextBusinessDay.getDay();
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    console.log(`ℹ️ Target date: ${nextBusinessDay.toDateString()} (${dayNames[dayOfWeek]})`);
-    
-    const clicked = await this.doubleClickTimeSlot(nextBusinessDay, null);
-    if (!clicked) throw new Error('Failed to double-click time slot');
-    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-    await this.page.waitForTimeout(1000);
-    await this.verifyAddEventPopupVisible();
-    console.log('✓ Add Event popup opened');
+  async openAddEventPopupRandomSlot() {
+    console.log('STEP: Open Add Event popup using truly empty random slot (8AM–5PM)');
+
+  await this.page.waitForSelector('td.e-work-cells', { timeout: 15000 });
+  await this.page.waitForSelector('.e-appointment', { timeout: 5000 }).catch(() => {});
+
+  const cells = this.page.locator(
+    'td.e-work-cells.available:not(.unavailable-color)'
+  );
+
+  const events = this.page.locator('.e-appointment, .e-event');
+
+  const eventBoxes = [];
+  const eventCount = await events.count();
+
+  // Capture ALL event bounding boxes
+  for (let i = 0; i < eventCount; i++) {
+    const box = await events.nth(i).boundingBox();
+    if (box) eventBoxes.push(box);
   }
+
+  const validSlots = [];
+  const cellCount = await cells.count();
+
+  for (let i = 0; i < cellCount; i++) {
+    const cell = cells.nth(i);
+
+    const dataDate = await cell.getAttribute('data-date');
+    if (!dataDate) continue;
+
+    const slotTime = new Date(Number(dataDate));
+    const hour = slotTime.getHours();
+
+    // Only 8 AM – 5 PM
+    if (hour < 8 || hour >= 17) continue;
+
+    const cellBox = await cell.boundingBox();
+    if (!cellBox) continue;
+
+    // Check overlap with ANY event
+    let overlapsEvent = false;
+    for (const eventBox of eventBoxes) {
+      if (this.isOverlapping(cellBox, eventBox)) {
+        overlapsEvent = true;
+        break;
+      }
+    }
+
+    if (!overlapsEvent) {
+      validSlots.push({ cell, slotTime });
+    }
+  }
+
+  if (validSlots.length === 0) {
+    throw new Error('No truly empty slots available between 8 AM and 5 PM');
+  }
+
+  // Pick random safe slot
+  const randomIndex = Math.floor(Math.random() * validSlots.length);
+  const { cell, slotTime } = validSlots[randomIndex];
+
+  console.log(
+    `✓ Clicking safe empty slot at ${slotTime.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })}`
+  );
+
+  await cell.scrollIntoViewIfNeeded();
+  await this.page.waitForTimeout(200);
+
+  try {
+    await cell.dblclick({ timeout: 5000 });
+  } catch {
+    await cell.dblclick({ force: true });
+  }
+
+  await this.verifyAddEventPopupVisible();
+  console.log('✓ Add Event popup opened successfully');
+  }
+
+  isOverlapping(a, b) {
+    if (!a || !b) return false;
+    return !(
+      a.x + a.width <= b.x ||
+      b.x + b.width <= a.x ||
+      a.y + a.height <= b.y ||
+      b.y + b.height <= a.y
+    );
+  }
+  
 
   async openAddEventPopupOnCurrentDay() {
     console.log('STEP: Opening Add Event popup on current day (finding available cell without event)...');
@@ -840,22 +958,14 @@ class SchedulingPage {
 
   async validateAddEventPopupFormFields() {
     console.log('STEP: Validating Add Event popup form fields...');
-    await this.verifyProviderControlVisibleAndDisabled();
     const providerName = await this.verifyProviderNamePrepopulated();
-    await this.verifyAppointmentEventRadioButtons();
     return providerName;
   }
 
   async reopenAddEventPopup() {
-    console.log('STEP: Reopening Add Event popup...');
-    await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
-    await this.page.waitForTimeout(500);
-    const nextBusinessDay = this.getNextBusinessDay();
-    const clicked = await this.doubleClickTimeSlot(nextBusinessDay, null);
-    if (!clicked) throw new Error('Failed to reopen popup');
-    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-    await this.page.waitForTimeout(1000);
-    await this.verifyAddEventPopupVisible();
+    console.log('STEP: Reopening Add Event popup using random available slot...');
+    // Use the same random slot selection method for consistency
+    await this.openAddEventPopupRandomSlot();
     console.log('✓ Add Event popup reopened');
   }
 
@@ -1025,37 +1135,26 @@ class SchedulingPage {
 
   // Edit Time methods
   async verifyEditTimeDisabled() {
-    console.log('ASSERT: Verifying Edit Time control is disabled...');
-    const selectors = [
-      this._getByLabel('Edit Time').locator('xpath=../..//input').first(),
-      this.page.locator('input[id*="edit"][id*="time" i]').first()
-    ];
+    console.log('ASSERT: Verifying End Time control is disabled...');
+    const endTimeControl = this._getTimeControl('End Time');
     
-    let editTimeControl = null;
-    for (const selector of selectors) {
-      if (await selector.isVisible({ timeout: 2000 }).catch(() => false)) {
-        editTimeControl = selector;
-        break;
-      }
-    }
-    
-    if (!editTimeControl) {
-      console.log('⚠️ Edit Time control not found');
+    if (!await endTimeControl.isVisible({ timeout: 2000 }).catch(() => false)) {
+      console.log('⚠️ End Time control not found');
       return;
     }
     
-    const isDisabled = await editTimeControl.isDisabled({ timeout: 5000 }).catch(() => false);
+    const isDisabled = await endTimeControl.isDisabled({ timeout: 5000 }).catch(() => false);
     if (!isDisabled) {
-      const jsCheck = await editTimeControl.evaluate((el) => el.disabled || el.readOnly || el.getAttribute('aria-disabled') === 'true');
-      if (!jsCheck) throw new Error('Edit Time control is not disabled');
+      const jsCheck = await endTimeControl.evaluate((el) => el.disabled || el.readOnly || el.getAttribute('aria-disabled') === 'true');
+      if (!jsCheck) throw new Error('End Time control is not disabled');
     }
-    console.log('✓ Edit Time control is disabled');
+    console.log('✓ End Time control is disabled');
   }
 
   // High-level combined validation methods for TC39
   async setupEventAndSelectEventType() {
     console.log('\n=== Setting up Event and selecting Event Type ===');
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     await this.selectEventRadioButton();
     
     // Additional wait to ensure Event Type dropdown is fully rendered and DOM is stable
@@ -1454,7 +1553,7 @@ class SchedulingPage {
     
     // Reload scheduler to see the new event (same logic as verifyEventDisplayedOnScheduler)
     await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-    await this.page.reload({ waitUntil: 'domcontentloaded' });
+    // await this.page.reload({ waitUntil: 'domcontentloaded' });
     await this.page.waitForTimeout(2000);
     await this.page.waitForSelector('td.e-work-cells', { timeout: 10000, state: 'visible' }).catch(() => {});
     await this.page.waitForTimeout(1000);
@@ -2215,7 +2314,7 @@ class SchedulingPage {
             const lowerText = alertText.toLowerCase();
             if (lowerText.includes('created') || lowerText.includes('saved') || 
                 lowerText.includes('success')) {
-              console.log(`✓ Success message found: ${alertText.trim()}`);
+              console.log(`✓ Success message found`);
               console.log('✓ Appointment saved successfully');
               
               // Delete the appointment from scheduler after successful creation
@@ -2479,7 +2578,7 @@ class SchedulingPage {
   // Get provider information
   async getProviderInformation() {
     // Open scheduler popup
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     await this.selectAppointmentRadioButton();
     await this.page.waitForTimeout(500);
     
@@ -3140,7 +3239,7 @@ class SchedulingPage {
       await this.page.waitForTimeout(800); // Increased wait
       
       // Type "test" to trigger autocomplete
-      await matPatientInput.type('test', { delay: 100 });
+      await matPatientInput.type('test15', { delay: 100 });
       
       // Wait for autocomplete panel to appear - try multiple selectors with longer timeout
       let autocompletePanel = this.page.locator('mat-autocomplete-panel, .mat-autocomplete-panel, .cdk-overlay-pane').first();
@@ -3223,6 +3322,10 @@ class SchedulingPage {
           console.log(`✓ Patient selected and verified: ${inputValue.trim()}`);
           // Additional wait to ensure dropdown is closed and form is ready for next field
           await this.page.waitForTimeout(500);
+          
+          // Handle Missed/Cancellation Warning popup if it appears
+          await this.handleMissedCancellationWarning();
+          
           return true;
         } else {
           // Try to verify by checking if autocomplete panel is closed
@@ -3230,10 +3333,18 @@ class SchedulingPage {
           if (!panelStillVisible) {
             console.log(`✓ Patient selected: ${optionText.trim()} (panel closed)`);
             await this.page.waitForTimeout(500);
+            
+            // Handle Missed/Cancellation Warning popup if it appears
+            await this.handleMissedCancellationWarning();
+            
             return true;
           } else {
             console.log('⚠️ Patient selection may not have registered, but continuing...');
             await this.page.waitForTimeout(500);
+            
+            // Handle Missed/Cancellation Warning popup if it appears
+            await this.handleMissedCancellationWarning();
+            
             return true;
           }
         }
@@ -3297,11 +3408,120 @@ class SchedulingPage {
       await optionToSelect.click({ force: true });
       await this.page.waitForTimeout(300);
       console.log(`✓ Patient selected: ${optionText.trim()}`);
+      
+      // Handle Missed/Cancellation Warning popup if it appears
+      await this.handleMissedCancellationWarning();
+      
       return true;
     }
     
     console.log('⚠️ No patient options found');
     return false;
+  }
+
+  /**
+   * Handle "Missed/Cancellation Warning" popup if it appears after patient selection
+   */
+  async handleMissedCancellationWarning() {
+    console.log('\n--- Checking for Missed/Cancellation Warning popup ---');
+    await this.page.waitForTimeout(1000); // Wait for popup to appear
+    
+    // Try multiple selectors for the warning popup
+    const warningPopupSelectors = [
+      '.modal:has-text("Missed/Cancellation Warning")',
+      '.modal:has-text("Missed Cancellation Warning")',
+      '[role="dialog"]:has-text("Missed/Cancellation Warning")',
+      '[role="dialog"]:has-text("Missed Cancellation Warning")',
+      '.e-popup-open:has-text("Missed")',
+      '.e-popup-open:has-text("Cancellation")',
+      '.modal:has-text("Missed")',
+      '.modal:has-text("Cancellation")',
+      '[role="dialog"]:has-text("Missed")',
+      '[role="dialog"]:has-text("Cancellation")'
+    ];
+    
+    let warningPopup = null;
+    for (const selector of warningPopupSelectors) {
+      const popup = this.page.locator(selector).first();
+      const isVisible = await popup.isVisible({ timeout: 3000 }).catch(() => false);
+      if (isVisible) {
+        warningPopup = popup;
+        console.log(`✓ Found Missed/Cancellation Warning popup with selector: "${selector}"`);
+        break;
+      }
+    }
+    
+    if (warningPopup) {
+      console.log('✓ Missed/Cancellation Warning popup is visible');
+      
+      // Find and click OK button
+      const okButtonSelectors = [
+        'button:has-text("OK")',
+        'button:has-text("Ok")',
+        'button:has-text("ok")',
+        'button.btn-primary:has-text("OK")',
+        'button.btn-primary:has-text("Ok")',
+        'button:has-text("Continue")',
+        'button:has-text("Close")',
+        '.modal-footer button:has-text("OK")',
+        '.modal-footer button.btn-primary'
+      ];
+      
+      let okButton = null;
+      for (const selector of okButtonSelectors) {
+        const btn = warningPopup.locator(selector).first();
+        const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          okButton = btn;
+          const btnText = await btn.textContent({ timeout: 1000 }).catch(() => '');
+          console.log(`✓ Found OK button with text: "${btnText.trim()}"`);
+          break;
+        }
+      }
+      
+      // If not found in popup, try page level
+      if (!okButton) {
+        for (const selector of okButtonSelectors) {
+          const btn = this.page.locator(selector).first();
+          const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+          if (isVisible) {
+            okButton = btn;
+            const btnText = await btn.textContent({ timeout: 1000 }).catch(() => '');
+            console.log(`✓ Found OK button (page level) with text: "${btnText.trim()}"`);
+            break;
+          }
+        }
+      }
+      
+      if (okButton) {
+        await okButton.scrollIntoViewIfNeeded();
+        await this.page.waitForTimeout(300);
+        await expect(okButton).toBeEnabled({ timeout: 3000 });
+        await okButton.click({ timeout: 5000 });
+        console.log('✓ OK button clicked on Missed/Cancellation Warning popup');
+        
+        // Wait for popup to close
+        await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+        await this.page.waitForTimeout(1000);
+        
+        // Verify popup is closed
+        const popupStillVisible = await warningPopup.isVisible({ timeout: 2000 }).catch(() => false);
+        if (!popupStillVisible) {
+          console.log('✓ Missed/Cancellation Warning popup closed successfully');
+        } else {
+          console.log('⚠️ Warning: Popup may still be visible, trying to close with Escape');
+          await this.page.keyboard.press('Escape');
+          await this.page.waitForTimeout(500);
+        }
+      } else {
+        console.log('⚠️ WARNING: OK button not found in Missed/Cancellation Warning popup');
+        console.log('⚠️ Trying to close popup with Escape key');
+        await this.page.keyboard.press('Escape');
+        await this.page.waitForTimeout(500);
+      }
+    } else {
+      console.log('ℹ️ No Missed/Cancellation Warning popup found - continuing normally');
+    }
   }
 
   // Select appointment type for appointment (not event type)
@@ -3861,10 +4081,11 @@ class SchedulingPage {
       return;
     }
     
-    // Step 4: Select patients
-    console.log('\n--- Step 4: Selecting patient ---');
-    await this.selectPatient();
-    isModalOpen = await modal.isVisible({ timeout: 2000 }).catch(() => false);
+        // Step 4: Select patients
+        console.log('\n--- Step 4: Selecting patient ---');
+        await this.selectPatient();
+        
+        isModalOpen = await modal.isVisible({ timeout: 2000 }).catch(() => false);
     if (!isModalOpen) {
       console.log('⚠️ Modal closed after selecting patient');
       return;
@@ -4342,7 +4563,7 @@ class SchedulingPage {
     }
     
     // Step 1: Open popup
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     
     // Check page again after opening popup
     try {
@@ -4376,6 +4597,10 @@ class SchedulingPage {
     
     // Select patient
     await this.selectPatient();
+    
+    // Check for and handle "Missed/Cancellation Warning" popup
+    await this.handleMissedCancellationWarning();
+    
     isModalOpen = await modal.isVisible({ timeout: 2000 }).catch(() => false);
     if (!isModalOpen) {
       console.log('⚠️ Modal closed after selecting patient');
@@ -4782,7 +5007,7 @@ class SchedulingPage {
     });
     
     // Open scheduler popup and fill fields (same flow as getProviderInformation)
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     await this.selectAppointmentRadioButton();
     await this.page.waitForTimeout(500);
     

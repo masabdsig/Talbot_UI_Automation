@@ -510,7 +510,21 @@ test.describe('Patient Module - Add Patient Flow', () => {
     await patient.navigateToPatientsTab(loginPage);
     await expect(patient.addPatientBtn).toBeVisible();
     await patient.openAddPatientModal();
+    
+    // Wait for modal to be fully loaded
     await expect(patient.modalTitle).toBeVisible({ timeout: 10000 });
+    
+    // Wait for DOM to be stable
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(500);
+    
+    // Wait for key form fields to be visible and ready
+    console.log('WAIT: Waiting for form fields to load...');
+    await expect(patient.firstName).toBeVisible({ timeout: 10000 });
+    await expect(patient.lastName).toBeVisible({ timeout: 10000 });
+    await expect(patient.dobInput).toBeVisible({ timeout: 10000 });
+    await expect(patient.address).toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(500); // Additional wait for form to be fully interactive
 
     await patient.fillRequiredFieldsForContactValidation();
     await patient.validateAllContactBusinessLogic();
@@ -599,68 +613,62 @@ test.describe('Patient Module - Add Patient Flow', () => {
     const loginPage = new LoginPage(page);
     const patient = new PatientPage(page);
 
-    // Generate unique patient data for duplicate detection testing
+    // Step 1: Generate patient data
     console.log("STEP 1: Generating new patient data for duplicate detection testing");
-    const originalFirstName = faker.person.firstName();
-    const originalLastName = faker.person.lastName() + '_' + Date.now();
-    const originalDOB = faker.date.birthdate({ min: 18, max: 70, mode: 'age' });
-    const originalDOBFormatted = originalDOB.toLocaleDateString('en-US');
-    // Generate a valid SSN format for duplicate detection (not using test number 123-45-6789)
-    const originalSSN = `${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 90) + 10}-${Math.floor(Math.random() * 9000) + 1000}`;
-    
-    const originalPatientData = {
-      firstName: originalFirstName,
-      lastName: originalLastName,
-      dob: originalDOBFormatted,
-      ssn: originalSSN
-    };
+    const originalPatientData = patient.generatePatientDataForDuplicateTesting();
 
-    console.log(`INFO: Patient data - Name: ${originalFirstName} ${originalLastName}, DOB: ${originalDOBFormatted}, SSN: ${originalSSN}`);
+    // Step 2: Create patient and navigate back
+    await patient.createPatientAndNavigateBack(loginPage, originalPatientData);
 
-    await patient.navigateToPatientsTab(loginPage);
-    await expect(patient.addPatientBtn).toBeVisible();
-    
-    // Step 2: Create original patient with all details including SSN
-    await patient.createPatientForDuplicateTesting(originalPatientData);
-    
-    // Step 3: Navigate back to patients list to test duplicate detection
-    await patient.navigateBackToPatientsListForDuplicateTesting(loginPage);
-
-    // Step 4: Validate duplicate detection business logic
+    // Step 3: Validate duplicate detection business logic
     console.log('\n==========================================');
-    console.log('STEP 4: Validating duplicate detection business logic');
+    console.log('STEP 3: Validating duplicate detection business logic');
     console.log('==========================================\n');
     
+    await patient.navigateToPatientsTab(loginPage);
+    await expect(patient.addPatientBtn).toBeVisible({ timeout: 15000 });
     await patient.openAddPatientModal();
+    
+    // Wait for modal to be fully loaded
     await expect(patient.modalTitle).toBeVisible({ timeout: 10000 });
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(500);
 
     // Run all duplicate detection validations (PAT-DUP-001 to PAT-DUP-004)
     await patient.validateAllDuplicateDetectionBusinessLogic(originalPatientData);
 
-    // PAT-DUP-005: Duplicate check runs on update
-    console.log('\n--- PAT-DUP-005: Duplicate check runs on create and update ---');
-    console.log('INFO: Duplicate check on create was validated during original patient creation');
+    // Cleanup: Close modal if still open
+    try {
+      const modalVisible = await patient.modalTitle.isVisible({ timeout: 2000 }).catch(() => false);
+      if (modalVisible) {
+        await patient.cancelBtn.click({ timeout: 3000 }).catch(() => {});
+        console.log('INFO: Modal closed during cleanup');
+      }
+    } catch (error) {
+      console.log(`INFO: Error during cleanup: ${error.message}`);
+    }
+  });
+
+  test('TC42. Validate Patient Duplicate Detection on Update', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const patient = new PatientPage(page);
+
+    // Step 1: Generate original patient data
+    console.log("STEP 1: Generating original patient data for update duplicate detection testing");
+    const originalPatientData = patient.generatePatientDataForDuplicateTesting();
+
+    // Step 2: Create original patient and navigate back
+    await patient.createPatientAndNavigateBack(loginPage, originalPatientData);
+
+    // Step 3: Create duplicate patient for update testing
+    console.log('\n--- PAT-DUP-005: Duplicate check runs on update ---');
+    console.log('STEP 3: Creating duplicate patient for update testing...');
+    const duplicatePatientData = patient.generatePatientDataForDuplicateTesting();
     
-    // Create a duplicate patient to test update duplicate detection
-    console.log('STEP 5: Creating duplicate patient for update testing...');
-    const duplicateFirstName = faker.person.firstName();
-    const duplicateLastName = faker.person.lastName() + '_' + Date.now();
-    const duplicateDOB = faker.date.birthdate({ min: 18, max: 70, mode: 'age' });
-    const duplicateDOBFormatted = duplicateDOB.toLocaleDateString('en-US');
-    const duplicateSSN = `${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 90) + 10}-${Math.floor(Math.random() * 9000) + 1000}`;
+    await patient.createPatientAndNavigateBack(loginPage, duplicatePatientData);
     
-    const duplicatePatientData = {
-      firstName: duplicateFirstName,
-      lastName: duplicateLastName,
-      dob: duplicateDOBFormatted,
-      ssn: duplicateSSN
-    };
-    
-    await patient.createPatientForDuplicateTesting(duplicatePatientData);
-    await patient.navigateBackToPatientsListForDuplicateTesting(loginPage);
-    
-    // Test duplicate detection on update
-    await patient.validateDuplicateCheckOnUpdate(originalPatientData, duplicatePatientData);
+    // Step 4: Update name on demographic page and validate duplicate detection
+    await patient.updatePatientNameOnDemographicPageAndValidateDuplicate(originalPatientData);
 
     // Cleanup: Close modal if still open
     try {

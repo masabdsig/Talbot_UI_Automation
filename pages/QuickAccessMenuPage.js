@@ -90,7 +90,7 @@ class QuickAccessMenuPage {
       { name: 'Scheduling', urlContains: 'scheduling' },
       { name: 'Followup Referrals', urlContains: 'followup-referrals' },
       { name: 'Internal Referrals', urlContains: 'internal' },
-      { name: 'Waiting Call', urlContains: 'waiting-call' },
+      { name: 'Tele Health Virtual Room', urlContains: 'client-waiting-room' },
       { name: 'Client Messages', urlContains: 'client-messages' },
       { name: 'Case Management Tasks', urlContains: 'casemanagement-tasks' },
       { name: 'Portal Requests', urlContains: 'portal-approval' },
@@ -837,10 +837,10 @@ class QuickAccessMenuPage {
   getReportsSubmenuItems() {
     return [
       { name: 'Patient List', urlContains: 'patient-list' },
-      { name: 'Resources', urlContains: 'resources' },
+      { name: 'Residential Bed Management', urlContains: 'resources' },
       { name: 'ITP Report', urlContains: 'itp-report' },
       { name: 'Encounter Addendums', urlContains: 'encounter-adandoms' },
-      { name: 'Medical Eligibility Report', urlContains: 'medical-eligibility' },
+      { name: 'Medicaid Eligibility Report', urlContains: 'medicaid-report' },
       { name: 'Attendance Report', urlContains: 'attendance-report' },
       { name: 'Chores', urlContains: 'chores' },
       { name: 'Vital Check', urlContains: 'vital-check' }

@@ -12,7 +12,7 @@ class BookingRulesPage extends SchedulingPage {
   async testDoubleBookingPrevention() {
     // Step 1: Create a booking by filling all required fields and save, assert success toaster
     console.log('\n=== Step 1: Create first appointment ===');
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     await this.selectAppointmentRadioButton();
     
     // Fill required fields (selectPatient method now handles proper timing for dropdown loading)
@@ -273,7 +273,7 @@ class BookingRulesPage extends SchedulingPage {
     console.log('ℹ️ Note: allow_double_booking is a backend configuration property');
     console.log('ℹ️ We verify by attempting to create overlapping appointments');
     
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     await this.selectAppointmentRadioButton();
     
     const appointmentType = await this.getAppointmentType();
@@ -306,7 +306,7 @@ class BookingRulesPage extends SchedulingPage {
     console.log('ℹ️ If this succeeds, appointment_type.allow_double_booking = true');
     console.log('ℹ️ If this fails with error, appointment_type.allow_double_booking = false');
     
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     await this.selectAppointmentRadioButton();
     
     if (appointmentType) {
@@ -338,7 +338,7 @@ class BookingRulesPage extends SchedulingPage {
     console.log('ℹ️ Using default start time from cell selection (not setting start time explicitly)');
 
     console.log('\n=== Attempt to create appointment within minimum lead time ===');
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     await this.selectAppointmentRadioButton();
     
     // Note: Not setting start time - using default time from cell selection
@@ -379,11 +379,11 @@ class BookingRulesPage extends SchedulingPage {
 
     console.log('\n=== Attempt to create appointment after minimum lead time ===');
     console.log('ℹ️ Finding next available cell (will skip cell with first booking)');
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     await this.selectAppointmentRadioButton();
     
     // Note: Not setting start time - using default time from cell selection
-    // The doubleClickTimeSlot method will automatically skip cells with events
+    // The openAddEventPopupRandomSlot method will automatically skip cells with events
     await this.setAppointmentDuration('30');
     
     const canCreateAfterLeadTime = await this.attemptToSaveAppointment();
@@ -438,13 +438,8 @@ class BookingRulesPage extends SchedulingPage {
     console.log('✓ Scheduler loaded for selected date');
 
     console.log('\n=== Step 4: Create booking on the selected date ===');
-    // Use doubleClickTimeSlot to open popup on the selected date (90 days ahead)
-    const clicked = await this.doubleClickTimeSlot(maxAdvanceDate, null);
-    
-    if (!clicked) {
-      console.log('⚠️ Could not open add event popup on selected date');
-      return false;
-    }
+    // Use random slot method to open popup on the selected date (90 days ahead)
+    await this.openAddEventPopupRandomSlot();
     
     await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
     await this.page.waitForTimeout(1000);
@@ -503,7 +498,7 @@ class BookingRulesPage extends SchedulingPage {
         console.log('✓ ASSERT: Cannot navigate beyond maximum advance booking date');
         return true;
       } else {
-        await this.openAddEventPopupOnNextDay();
+        await this.openAddEventPopupRandomSlot();
         await this.selectAppointmentRadioButton();
         
         // Note: Not setting start time - using default time from cell selection
@@ -534,7 +529,7 @@ class BookingRulesPage extends SchedulingPage {
   // Test patient overlapping appointments
   async testPatientOverlappingAppointments(appointmentTime = '2:00 PM', duration = '60', overlappingTime = '2:30 PM') {
     console.log('\n=== Step 1: Create first appointment with duration 10 ===');
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     await this.selectAppointmentRadioButton();
     await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
     await this.page.waitForTimeout(500);
@@ -599,23 +594,97 @@ class BookingRulesPage extends SchedulingPage {
     await this.page.waitForTimeout(1000);
     
     console.log('\n=== Step 3: Find the cell with first appointment ===');
-    // Find the cell that has the first appointment
+    // Find the cell that has the first appointment - check ALL slots thoroughly
     const allCells = this.page.locator('td.e-work-cells');
     const cellCount = await allCells.count({ timeout: 5000 }).catch(() => 0);
+    console.log(`ℹ️ Total cells found: ${cellCount}`);
+    
+    // Also get all events on the scheduler
+    const allEvents = this.page.locator('.e-event:not(button):not(.e-event-cancel):not(.e-event-save), .e-appointment:not(button)');
+    const eventCount = await allEvents.count({ timeout: 3000 }).catch(() => 0);
+    console.log(`ℹ️ Total events found: ${eventCount}`);
+    
+    // Get bounding boxes of all events for overlap checking
+    const eventBoxes = [];
+    for (let i = 0; i < eventCount; i++) {
+      const eventBox = await allEvents.nth(i).boundingBox().catch(() => null);
+      if (eventBox) {
+        eventBoxes.push(eventBox);
+      }
+    }
+    console.log(`ℹ️ Captured ${eventBoxes.length} event bounding boxes`);
     
     let targetCell = null;
+    let foundIndex = -1;
+    
+    // Check all cells for events using multiple methods
     for (let i = 0; i < cellCount; i++) {
       const cell = allCells.nth(i);
-      const hasEvent = await this.cellHasEvent(cell);
-      if (hasEvent) {
+      
+      // Method 1: Use cellHasEvent method
+      const hasEvent = await this.cellHasEvent(cell).catch(() => false);
+      
+      // Method 2: Check for events directly in cell using multiple selectors
+      let hasEventDirect = false;
+      const eventSelectors = [
+        '.e-event:not(button):not(.e-event-cancel):not(.e-event-save)',
+        '.e-appointment:not(button)',
+        '.e-schedule-event:not(button)',
+        'div[class*="event-item"]:not(button)',
+        '.subject',
+        '[class*="subject"]'
+      ];
+      
+      for (const selector of eventSelectors) {
+        const eventInCell = cell.locator(selector).first();
+        const isVisible = await eventInCell.isVisible({ timeout: 300 }).catch(() => false);
+        if (isVisible) {
+          hasEventDirect = true;
+          break;
+        }
+      }
+      
+      // Method 3: Check bounding box overlap with events
+      let hasEventOverlap = false;
+      if (eventBoxes.length > 0) {
+        const cellBox = await cell.boundingBox().catch(() => null);
+        if (cellBox) {
+          for (const eventBox of eventBoxes) {
+            if (this.isOverlapping(cellBox, eventBox)) {
+              hasEventOverlap = true;
+              break;
+            }
+          }
+        }
+      }
+      
+      // If any method detected an event, use this cell
+      if (hasEvent || hasEventDirect || hasEventOverlap) {
         targetCell = cell;
-        console.log(`✓ Found cell with first appointment at index ${i}`);
+        foundIndex = i;
+        
+        // Get cell time for logging
+        const dataDate = await cell.getAttribute('data-date').catch(() => null);
+        let timeStr = `index ${i}`;
+        if (dataDate) {
+          const cellTime = new Date(parseInt(dataDate));
+          timeStr = cellTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        }
+        
+        console.log(`✓ Found cell with first appointment at index ${i} (${timeStr})`);
+        console.log(`  - cellHasEvent: ${hasEvent}, direct check: ${hasEventDirect}, overlap check: ${hasEventOverlap}`);
         break;
+      }
+      
+      // Log progress every 50 cells
+      if ((i + 1) % 50 === 0) {
+        console.log(`ℹ️ Checked ${i + 1}/${cellCount} cells...`);
       }
     }
     
     if (!targetCell) {
-      console.log('⚠️ Could not find cell with first appointment');
+      console.log(`⚠️ Could not find cell with first appointment after checking all ${cellCount} cells`);
+      console.log(`ℹ️ Event count on scheduler: ${eventCount}`);
       return false;
     }
 
@@ -624,7 +693,14 @@ class BookingRulesPage extends SchedulingPage {
     await this.page.waitForTimeout(500);
     
     // Double-click on the same cell to try to create another appointment
-    await targetCell.dblclick({ timeout: 5000 });
+    // Note: The cell has an event that may intercept clicks, so we'll try normal click first, then force if needed
+    try {
+      await targetCell.dblclick({ timeout: 5000 });
+    } catch (clickError) {
+      // If click is intercepted by event element or times out, try force click
+      console.log('ℹ️ Click intercepted or timed out, trying force click...');
+      await targetCell.dblclick({ force: true, timeout: 5000 });
+    }
     await this.page.waitForTimeout(2000);
     
     // Check if modal opened
@@ -722,7 +798,7 @@ class BookingRulesPage extends SchedulingPage {
 
   // Test appointment duration validation
   async testDurationValidation(appointmentTime = '3:00 PM') {
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     await this.selectAppointmentRadioButton();
     await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
     await this.page.waitForTimeout(500);
@@ -759,7 +835,7 @@ class BookingRulesPage extends SchedulingPage {
 
   // Test end time validation
   async testEndTimeValidation(startTime = '4:00 PM', duration = '30') {
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     await this.selectAppointmentRadioButton();
     await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
     await this.page.waitForTimeout(500);
@@ -798,7 +874,7 @@ class BookingRulesPage extends SchedulingPage {
 
   // Test future start time validation
   async testFutureStartTimeValidation() {
-    await this.openAddEventPopupOnNextDay();
+    await this.openAddEventPopupRandomSlot();
     await this.selectAppointmentRadioButton();
     await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
     await this.page.waitForTimeout(500);
