@@ -177,6 +177,8 @@ class HeaderMenuPage {
       // Determine whether menu is already open
       if (!(await isOverflowMenuOpen())) {
         console.log("↪️ Overflow menu is closed — opening it");
+        // Wait for loader to disappear before clicking
+        await this.waitForLoaderToDisappear();
         await this.overflowArrowButton.click();
         await this.page.waitForTimeout(300);
       } else {
@@ -307,6 +309,8 @@ class HeaderMenuPage {
           await expect(this.overflowArrowButton).toBeVisible({ timeout: 8000 });
           await expect(this.overflowArrowButton).toBeEnabled();
         
+          // Wait for loader to disappear before clicking
+          await this.waitForLoaderToDisappear();
           await this.overflowArrowButton.click();
           await this.page.waitForTimeout(300);
         }
@@ -393,6 +397,33 @@ class HeaderMenuPage {
     // Overflow menu is always available on header, ensure it's ready
     await expect(this.overflowArrowButton).toBeVisible({ timeout: 6000 });
     await expect(this.overflowArrowButton).toBeEnabled();
+  }
+
+  async waitForLoaderToDisappear() {
+    // Wait for loader overlay to disappear before interacting with elements
+    const loaderSelector = 'patient-loader .loader-wrapper, .loader-wrapper, patient-loader';
+    
+    try {
+      // Check if loader exists and is visible
+      const loader = this.page.locator(loaderSelector).first();
+      const isVisible = await loader.isVisible({ timeout: 1000 }).catch(() => false);
+      
+      if (isVisible) {
+        console.log('⏳ Waiting for loader to disappear...');
+        // Wait for loader to be hidden (not intercepting clicks)
+        await loader.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {
+          // If it doesn't hide, wait for it to be removed from DOM
+          return this.page.waitForSelector(loaderSelector, { state: 'detached', timeout: 15000 }).catch(() => {});
+        });
+        console.log('✔️ Loader disappeared');
+      }
+    } catch (e) {
+      // Loader might not exist or already gone, which is fine
+      // Continue execution
+    }
+    
+    // Additional small wait to ensure UI is stable after loader disappears
+    await this.page.waitForTimeout(300);
   }
   
 }
