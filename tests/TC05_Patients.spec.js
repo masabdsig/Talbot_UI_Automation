@@ -660,15 +660,13 @@ test.describe('Patient Module - Add Patient Flow', () => {
     // Step 2: Create original patient and navigate back
     await patient.createPatientAndNavigateBack(loginPage, originalPatientData);
 
-    // Step 3: Create duplicate patient for update testing
+    // Step 3: Create duplicate patient and update on demographic page
     console.log('\n--- PAT-DUP-005: Duplicate check runs on update ---');
-    console.log('STEP 3: Creating duplicate patient for update testing...');
+    console.log('STEP 3: Creating duplicate patient and updating on demographic page...');
     const duplicatePatientData = patient.generatePatientDataForDuplicateTesting();
     
-    await patient.createPatientAndNavigateBack(loginPage, duplicatePatientData);
-    
-    // Step 4: Update name on demographic page and validate duplicate detection
-    await patient.updatePatientNameOnDemographicPageAndValidateDuplicate(originalPatientData);
+    // Create patient and update on demographic page (stays on demographic page, no navigation back)
+    await patient.createPatientAndUpdateOnDemographicPage(loginPage, duplicatePatientData, originalPatientData);
 
     // Cleanup: Close modal if still open
     try {

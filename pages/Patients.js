@@ -6155,39 +6155,64 @@ class PatientPage {
     await this.navigateToPatientsTab(loginPage);
     await expect(this.addPatientBtn).toBeVisible({ timeout: 15000 });
     await this.createPatientForDuplicateTesting(patientData, true);
-    
+
     // Assert success toaster
     console.log('ASSERT: Verifying success toaster...');
     await expect(this.successToast).toBeVisible({ timeout: 10000 });
     console.log('ASSERT: Success toaster is visible - patient created successfully');
-    
+
     // Navigate to patients page
     console.log('ACTION: Navigating to Patients page after patient creation...');
     await this.navigateToPatientsTab(loginPage);
     await expect(this.addPatientBtn).toBeVisible({ timeout: 15000 });
   }
 
+  // Create patient and update on demographic page (stays on demographic page after creation)
+  async createPatientAndUpdateOnDemographicPage(loginPage, patientData, originalPatientData) {
+    // await this.navigateToPatientsTab(loginPage);
+    await expect(this.addPatientBtn).toBeVisible({ timeout: 15000 });
+    
+    // Create patient (skipDemographicsWait = false so it navigates to demographics page)
+    await this.createPatientForDuplicateTesting(patientData, false);
+
+    // Assert success toaster
+    console.log('ASSERT: Verifying success toaster...');
+    await expect(this.successToast).toBeVisible({ timeout: 10000 });
+    console.log('ASSERT: Success toaster is visible - patient created successfully');
+
+    // Wait for demographic page to load (opens automatically after save)
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 15000 });
+    await this.page.waitForTimeout(2000);
+    
+    // Now update the name on demographic page
+    await this.updatePatientNameOnDemographicPageAndValidateDuplicate(originalPatientData);
+  }
+
   // Update patient name on demographic page and validate duplicate detection
   async updatePatientNameOnDemographicPageAndValidateDuplicate(originalPatientData) {
     console.log('\nSTEP: Testing duplicate detection on update...');
     console.log('ACTION: Updating patient name directly on demographic page...');
-    
+
     // Wait for demographic page to be ready
     await this.page.waitForLoadState('domcontentloaded', { timeout: 15000 });
     await this.page.waitForTimeout(2000);
     
+    // Wait for edit form to load
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 15000 });
+    await this.page.waitForTimeout(2000);
+
     // Update name to match original patient
     console.log(`ACTION: Updating Name to match original patient: ${originalPatientData.firstName} ${originalPatientData.lastName}`);
-    
+
     // Wait for fields to be visible and ready
     await expect(this.firstNameOnPage).toBeVisible({ timeout: 10000 });
     await expect(this.lastNameOnPage).toBeVisible({ timeout: 10000 });
-    
+
     // Clear and fill first name
     await this.firstNameOnPage.clear({ timeout: 3000 }).catch(() => {});
     await this.firstNameOnPage.fill(originalPatientData.firstName);
     await this.page.waitForTimeout(500);
-    
+
     // Clear and fill last name
     await this.lastNameOnPage.clear({ timeout: 3000 }).catch(() => {});
     await this.lastNameOnPage.fill(originalPatientData.lastName);
