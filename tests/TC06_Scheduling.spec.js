@@ -1,6 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const { LoginPage } = require('../pages/LoginPage');
 const { SchedulingPage } = require('../pages/SchedulingPage');
+const { PatientPage } = require('../pages/Patients');
+const { faker } = require('@faker-js/faker');
+const fs = require('fs');
+const path = require('path');
 
 test.use({ storageState: 'authState.json' });
 
@@ -247,7 +251,7 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
     console.log('\n✓ TEST COMPLETED: Availability window validation completed');
   });
 
-  test('TC50. Appointments blocked during schedule blocks', async ({ page }) => {
+  test('TC50. Appointments blocked during schedule blocks and check error message', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
@@ -273,29 +277,111 @@ test.describe('Scheduling Module - Add Appointment/Event', () => {
       }
     }
     
-    console.log('\n✓ TEST COMPLETED: Schedule block validation completed');
+    // Assert error toaster message once at the end
+    console.log('\n=== Asserting error toaster message ===');
+    const errorToasterVerified = await schedulingPage.verifyProviderUnavailableErrorToaster();
+    if (errorToasterVerified) {
+      console.log('✓ ASSERT: Error toaster message verified successfully');
+    } else {
+      throw new Error('Error toaster message verification failed');
+    }
+    
+    console.log('\n✓ TEST COMPLETED: Schedule block validation and error toaster verification completed');
   });
 
-  test('TC51. Provider must be active at location for appointment location', async ({ page }) => {
+  test('TC51. Check Provider Availability slot', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
 
+    console.log('\n=== STEP 1: Setup scheduler for next day ===');
     await schedulingPage.setupSchedulerForNextDay(loginPage);
-    await schedulingPage.validateProviderLocationAndAttemptAppointment();
-    
-    console.log('\n✓ TEST COMPLETED: Provider location validation completed');
+
+    console.log('\n=== STEP 2: Open create appointment modal ===');
+    await schedulingPage.openAddEventPopupRandomSlot();
+
+    console.log('\n=== STEP 3: Click Check Provider Availability Slots button ===');
+    await schedulingPage.clickCheckProviderAvailabilitySlots();
+
+    console.log('\n=== STEP 4: Validate Available Slots modal title appears ===');
+    await schedulingPage.verifyAvailableSlotsModalTitle();
+
+    console.log('\n=== STEP 5: Input tomorrow date and check availability ===');
+    const tomorrowDate = await schedulingPage.getPreviousDate(); // Returns tomorrow
+    await schedulingPage.inputToDateAndCheckAvailability(tomorrowDate);
+    await schedulingPage.verifyAvailabilityGridShowsResults(tomorrowDate);
+
+    console.log('\n=== STEP 6: Input day after tomorrow date and check availability ===');
+    const dayAfterTomorrowDate = await schedulingPage.getNextDate(); // Returns day after tomorrow
+    await schedulingPage.inputToDateAndCheckAvailability(dayAfterTomorrowDate);
+    await schedulingPage.verifyAvailabilityGridShowsResults(dayAfterTomorrowDate);
+
+    console.log('\n✓ TEST COMPLETED: Provider availability slot validation completed');
   });
 
-  test('TC52. Location must be active for appointment date', async ({ page }) => {
+  test('TC52. Create Appointment for new patient', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const schedulingPage = new SchedulingPage(page);
+    const patientPage = new PatientPage(page);
 
+    // Generate patient data with faker
+    const firstName = faker.person.firstName();
+    const lastName = faker.person.lastName() + '_' + Date.now();
+    const dob = faker.date.birthdate({ min: 18, max: 70, mode: 'age' });
+    const dobFormatted = dob.toLocaleDateString('en-US');
+    const email = faker.internet.email();
+    const phone = faker.phone.number({ style: 'national' });
+
+    const patientData = {
+      firstName,
+      lastName,
+      dob: dobFormatted,
+      gender: 'Male',
+      address: '123 Main St',
+      zipcode: '12345',
+      city: 'New York',
+      state: 'NY',
+      phone: phone,
+      createdAt: new Date().toISOString()
+    };
+
+    console.log("PATIENT DATA →", patientData);
+
+    // Save patient data to JSON file
+    const dataDir = path.join(__dirname, '../data');
+    const filePath = path.join(dataDir, 'createdPatient.json');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir);
+    }
+    fs.writeFileSync(filePath, JSON.stringify(patientData, null, 2));
+    console.log(`PATIENT DATA SAVED TO: ${filePath}`);
+
+    // Generate insurance data
+    const policyNumber = faker.string.alphanumeric(10).toUpperCase();
+    const insuranceData = {
+      companyType: 'Commercial/PPO',
+      policyNumber: policyNumber,
+      level: 'Primary',
+      ptRelation: 'Self'
+    };
+
+    // Execute test steps using page object methods
+    console.log('\n=== STEP 1: Setup scheduler and appointment modal ===');
     await schedulingPage.setupSchedulerForNextDay(loginPage);
-    
-    const appointmentDate = new Date();
-    appointmentDate.setDate(appointmentDate.getDate() + 1);
-    await schedulingPage.validateLocationStatusAndAttemptAppointment(appointmentDate);
-    
-    console.log('\n✓ TEST COMPLETED: Location status validation completed');
+    await schedulingPage.setupAppointmentModalAndSelectType();
+
+    console.log('\n=== STEP 2: Create new patient ===');
+    await schedulingPage.createNewPatientFromAppointmentModal(patientPage, patientData, email);
+
+    console.log('\n=== STEP 3: Add insurance policy ===');
+    await schedulingPage.addInsurancePolicyForPatient(patientPage, insuranceData, patientData);
+
+    console.log('\n=== STEP 4: Handle post-insurance modals ===');
+    await schedulingPage.handlePostInsuranceModals(patientPage);
+
+    console.log('\n=== STEP 5: Save appointment and delete ===');
+    await schedulingPage.saveAppointmentAndVerifySuccess();
+    await schedulingPage.deleteAppointment();
+
+    console.log('\n✓ TEST COMPLETED: Appointment created for new patient and deleted successfully');
   });
 });

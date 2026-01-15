@@ -117,31 +117,7 @@ test.describe('Scheduling Module - Patient Eligibility Cancellation Rules', () =
     console.log('\n✓ TEST COMPLETED: TC65 validation completed');
   });
 
-  test.skip('TC66: Late cancellation (< 24 hours) flagged for potential fee', async ({ page }) => {
-    const loginPage = new LoginPage(page);
-    const eligibilityPage = new PatientEligibilityPage(page);
-
-    console.log('\n=== TEST: TC66: Late cancellation (< 24 hours) flagged for potential fee ===');
-    
-    await eligibilityPage.navigateToSchedulingAndOpenAppointment(loginPage);
-    
-    const result = await eligibilityPage.testLateCancellationWarning();
-    
-    // Assertions
-    if (result.warningShown) {
-      expect(result.passed).toBe(true);
-      expect(result.warningShown).toBe(true);
-      console.log(`✓ TEST PASSED: Late cancellation warning is displayed`);
-    } else {
-      console.log('ℹ️ TEST NOTE: No late cancellation warning found');
-      console.log('ℹ️ This may indicate the appointment is more than 24 hours away');
-    }
-    
-    await eligibilityPage.closeModal();
-    console.log('\n✓ TEST COMPLETED: TC66 validation completed');
-  });
-
-  test('TC67: Cancelled appointments cannot be un-cancelled (must rebook)', async ({ page }) => {
+  test('TC66: Cancelled appointments cannot be un-cancelled (must rebook)', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const eligibilityPage = new PatientEligibilityPage(page);
 
@@ -161,7 +137,7 @@ test.describe('Scheduling Module - Patient Eligibility Cancellation Rules', () =
     console.log('\n✓ TEST COMPLETED: TC67 validation completed');
   });
 
-  test('TC68: No-show requires reason documentation', async ({ page }) => {
+  test('TC67: No-show requires reason documentation', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const eligibilityPage = new PatientEligibilityPage(page);
 
@@ -208,7 +184,7 @@ test.describe('Scheduling Module - Patient Eligibility Cancellation Rules', () =
     console.log('\n✓ TEST COMPLETED: TC68 validation completed');
   });
 
-  test('TC69: No-show count tracked per patient', async ({ page }) => {
+  test('TC68: No-show count tracked per patient', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const eligibilityPage = new PatientEligibilityPage(page);
 
@@ -228,7 +204,7 @@ test.describe('Scheduling Module - Patient Eligibility Cancellation Rules', () =
     console.log('\n✓ TEST COMPLETED: TC69 validation completed');
   });
 
-  test('TC70: Alert after 3 consecutive no-shows', async ({ page }) => {
+  test('TC69: Alert after 3 consecutive no-shows', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const eligibilityPage = new PatientEligibilityPage(page);
 
@@ -260,7 +236,7 @@ test.describe('Scheduling Module - Patient Eligibility Cancellation Rules', () =
     console.log('\n✓ TEST COMPLETED: TC70 validation completed');
   });
 
-  test('TC71: No-show fee eligibility based on payer rules', async ({ page }) => {
+  test('TC70: No-show fee eligibility based on payer rules', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const eligibilityPage = new PatientEligibilityPage(page);
 

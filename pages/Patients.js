@@ -928,14 +928,77 @@ class PatientPage {
   }
 
   async fillMandatoryFields(data) {
+    // Ensure page is not closed
+    try {
+      if (this.page.isClosed()) {
+        throw new Error('Page was closed before filling mandatory fields');
+      }
+    } catch (e) {
+      throw new Error('Page context is invalid: ' + e.message);
+    }
+    
+    // Verify Add New Patient modal is visible and stable
+    await expect(this.modalTitle).toBeVisible({ timeout: 10000 });
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(1000); // Wait for modal to be fully rendered
+    
     console.log(`ACTION: Filling first name: ${data.firstName}`);
+    await expect(this.firstName).toBeVisible({ timeout: 5000 });
     await this.firstName.fill(data.firstName);
 
     console.log(`ACTION: Filling last name: ${data.lastName}`);
+    await expect(this.lastName).toBeVisible({ timeout: 5000 });
     await this.lastName.fill(data.lastName);
 
     console.log(`ACTION: Filling DOB: ${data.dob}`);
-    await this.dobInput.fill(data.dob);
+    // Wait for DOB input to be visible and ready - it's a datepicker input
+    // Try multiple selectors for DOB input as it might have different structure when opened from appointment modal
+    const dobSelectors = [
+      `${this._modalScope} #patient_dob_datepicker_input`,
+      '#patient_dob_datepicker_input',
+      'input[id*="patient_dob"][id*="datepicker"]',
+      'input[id*="dob_datepicker"]',
+      'ejs-datepicker#patient_dob_datepicker_input input',
+      '.modal input[id*="dob"][id*="datepicker"]'
+    ];
+    
+    let dobInput = null;
+    for (const selector of dobSelectors) {
+      const input = this.page.locator(selector).first();
+      const isVisible = await input.isVisible({ timeout: 2000 }).catch(() => false);
+      if (isVisible) {
+        dobInput = input;
+        console.log(`✓ DOB input found with selector: ${selector}`);
+        break;
+      }
+    }
+    
+    if (!dobInput) {
+      // Try to find it within the modal scope more flexibly
+      const modal = this.page.locator('.modal:has-text("Add New Patient"), [role="dialog"]:has-text("Add New Patient")').first();
+      const modalDobInput = modal.locator('input[id*="dob"], input[id*="datepicker"]').first();
+      const isVisible = await modalDobInput.isVisible({ timeout: 2000 }).catch(() => false);
+      if (isVisible) {
+        dobInput = modalDobInput;
+        console.log(`✓ DOB input found within modal`);
+      }
+    }
+    
+    if (!dobInput) {
+      throw new Error('DOB input not found in Add New Patient modal');
+    }
+    
+    await this.page.waitForTimeout(500);
+    
+    // Verify page is still not closed
+    if (this.page.isClosed()) {
+      throw new Error('Page was closed while waiting for DOB input');
+    }
+    
+    // Click on DOB input first to focus it, then fill
+    await dobInput.click();
+    await this.page.waitForTimeout(300);
+    await dobInput.fill(data.dob);
 
     await this.page.waitForTimeout(2000);
     // GENDER SELECTION

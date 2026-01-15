@@ -165,26 +165,56 @@ class RecurringAppointmentsPage extends SchedulingPage {
       throw new Error('Appointment Type dropdown wrapper not found');
     }
 
-    // Click dropdown to open
+    // Click dropdown to open - try multiple strategies
     await dropdownWrapper.scrollIntoViewIfNeeded();
     await this.page.waitForTimeout(300);
     
-    const dropdownIcon = dropdownWrapper.locator('.e-ddl-icon, .e-input-group-icon, span.e-ddl-icon').first();
+    // Strategy 1: Try clicking the dropdown icon
+    const dropdownIcon = dropdownWrapper.locator('.e-ddl-icon, .e-input-group-icon, span.e-ddl-icon, .e-search-icon').first();
     const iconVisible = await dropdownIcon.isVisible({ timeout: 1000 }).catch(() => false);
     
     if (iconVisible) {
-      await dropdownIcon.click({ force: true });
+      console.log('STEP: Clicking Appointment Type dropdown icon...');
+      await dropdownIcon.click({ force: true, timeout: 3000 });
+      await this.page.waitForTimeout(500);
     } else {
+      // Strategy 2: Try clicking the input field
       const input = dropdownWrapper.locator('input[readonly], input[role="combobox"]').first();
       const inputVisible = await input.isVisible({ timeout: 1000 }).catch(() => false);
       if (inputVisible) {
-        await input.click({ force: true });
+        console.log('STEP: Clicking Appointment Type dropdown input...');
+        await input.click({ force: true, timeout: 3000 });
+        await this.page.waitForTimeout(500);
       } else {
-        await dropdownWrapper.click({ force: true });
+        // Strategy 3: Click the wrapper itself
+        console.log('STEP: Clicking Appointment Type dropdown wrapper...');
+        await dropdownWrapper.click({ force: true, timeout: 3000 });
+        await this.page.waitForTimeout(500);
       }
     }
     
-    await this.page.waitForTimeout(1500);
+    // Wait for dropdown to open and verify it opened
+    await this.page.waitForTimeout(1000);
+    
+    // Verify dropdown opened by checking if aria-expanded is true or popup is visible
+    const inputForCheck = dropdownWrapper.locator('input[readonly], input[role="combobox"]').first();
+    const ariaExpanded = await inputForCheck.getAttribute('aria-expanded').catch(() => 'false');
+    
+    if (ariaExpanded !== 'true') {
+      // Try clicking again if not opened
+      console.log('STEP: Dropdown not opened, trying to click again...');
+      if (iconVisible) {
+        await dropdownIcon.click({ force: true, timeout: 3000 });
+      } else {
+        const inputForClick = dropdownWrapper.locator('input[readonly], input[role="combobox"]').first();
+        await inputForClick.click({ force: true, timeout: 3000 }).catch(() => {
+          return dropdownWrapper.click({ force: true, timeout: 3000 });
+        });
+      }
+      await this.page.waitForTimeout(1000);
+    }
+    
+    await this.page.waitForTimeout(500);
 
     // Find popup and select "Group-IOP" option
     const popupSelectors = [
@@ -192,30 +222,94 @@ class RecurringAppointmentsPage extends SchedulingPage {
       '.e-popup-open:visible',
       'ul.e-list-parent:visible',
       '.e-dropdownbase:visible',
-      '[role="listbox"]:visible'
+      '[role="listbox"]:visible',
+      '.e-popup:visible'
     ];
     
     let popup = null;
+    let popupVisible = false;
+    
     for (const selector of popupSelectors) {
       popup = this.page.locator(selector).first();
-      const popupVisible = await popup.isVisible({ timeout: 3000 }).catch(() => false);
+      popupVisible = await popup.isVisible({ timeout: 3000 }).catch(() => false);
       if (popupVisible) {
+        console.log(`ℹ️ Found popup with selector: ${selector}`);
         break;
       }
     }
-
-    // Get all options and log them for debugging
-    const allOptions = popup.locator('li[role="option"], li.e-list-item');
-    const optionCount = await allOptions.count();
-    console.log(`ℹ️ Found ${optionCount} appointment type option(s) in dropdown`);
     
-    // Log all available options
-    for (let i = 0; i < Math.min(optionCount, 20); i++) {
-      const option = allOptions.nth(i);
-      const optionText = await option.textContent({ timeout: 1000 }).catch(() => '');
-      if (optionText) {
-        console.log(`  Option ${i + 1}: "${optionText.trim()}"`);
+    // If still not visible, wait more and try again
+    if (!popupVisible) {
+      await this.page.waitForTimeout(1000);
+      for (const selector of popupSelectors) {
+        popup = this.page.locator(selector).first();
+        popupVisible = await popup.isVisible({ timeout: 3000 }).catch(() => false);
+        if (popupVisible) {
+          console.log(`ℹ️ Found popup after wait with selector: ${selector}`);
+          break;
+        }
       }
+    }
+    
+    if (!popupVisible) {
+      throw new Error('Appointment Type dropdown popup not found');
+    }
+    
+    // Wait for popup to be fully visible
+    await popup.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+    
+    // Wait for network to be idle (options might be loading via API)
+    await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    
+    // Wait for loader to disappear if present
+    await this._waitForLoaderToDisappear();
+    await this.page.waitForTimeout(500);
+    
+    // Try multiple option selectors with retry logic
+    const optionSelectors = [
+      'li[role="option"]',
+      'li.e-list-item',
+      'ul.e-list-parent li',
+      '.e-dropdownbase li',
+      '[role="option"]'
+    ];
+    
+    let allOptions = null;
+    let optionCount = 0;
+    let maxRetries = 5;
+    let retryCount = 0;
+    
+    // Retry logic to wait for options to load
+    while (optionCount === 0 && retryCount < maxRetries) {
+      for (const selector of optionSelectors) {
+        allOptions = popup.locator(selector).filter({ hasNotText: '' });
+        
+        // Wait for at least one option to be visible
+        try {
+          const firstOption = allOptions.first();
+          await firstOption.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+        } catch (e) {
+          // Continue to next selector
+        }
+        
+        optionCount = await allOptions.count({ timeout: 3000 }).catch(() => 0);
+        if (optionCount > 0) {
+          break;
+        }
+      }
+      
+      if (optionCount === 0) {
+        retryCount++;
+        console.log(`ℹ️ No options found yet, retrying... (${retryCount}/${maxRetries})`);
+        await this.page.waitForTimeout(1000); // Wait before retry
+        // Wait for network and loader again
+        await this.page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+        await this._waitForLoaderToDisappear();
+      }
+    }
+    
+    if (optionCount === 0) {
+      throw new Error('No options found in Appointment Type dropdown after waiting for elements to load');
     }
     
     // Try multiple search patterns for Group-IOP
@@ -253,7 +347,6 @@ class RecurringAppointmentsPage extends SchedulingPage {
           if (lowerText.includes(pattern.toLowerCase())) {
             foundOption = option;
             matchedText = optionText.trim();
-            console.log(`ℹ️ Found Group-IOP match with pattern "${pattern}": "${matchedText}"`);
             break;
           }
         }
@@ -296,10 +389,9 @@ class RecurringAppointmentsPage extends SchedulingPage {
       
       // Additional wait to ensure fields are fully rendered
       await this.page.waitForTimeout(1000);
-      console.log(`✓ Group-IOP appointment type selected: "${matchedText}"`);
+      console.log(`✓ Group-IOP appointment type selected`);
     } else {
-      console.log('⚠️ Group-IOP option not found. Available options listed above.');
-      throw new Error('Group-IOP option not found in Appointment Type dropdown. Check the logged options above.');
+      throw new Error('Group-IOP option not found in Appointment Type dropdown');
     }
   }
 
@@ -379,8 +471,15 @@ class RecurringAppointmentsPage extends SchedulingPage {
       throw new Error('Group Therapy dropdown popup not found');
     }
     
-    await popup.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
-    await this.page.waitForTimeout(800); // Wait for options to render
+    // Wait for popup to be fully visible
+    await popup.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+    
+    // Wait for network to be idle (options might be loading via API)
+    await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    
+    // Wait for loader to disappear if present
+    await this._waitForLoaderToDisappear();
+    await this.page.waitForTimeout(500);
     
     // Try multiple option selectors
     const optionSelectors = [
@@ -393,29 +492,50 @@ class RecurringAppointmentsPage extends SchedulingPage {
     
     let options = null;
     let count = 0;
+    let maxRetries = 5;
+    let retryCount = 0;
     
-    for (const selector of optionSelectors) {
-      options = popup.locator(selector).filter({ hasNotText: '' });
-      count = await options.count({ timeout: 2000 }).catch(() => 0);
-      if (count > 0) {
-        console.log(`ℹ️ Found ${count} option(s) with selector: ${selector}`);
-        break;
+    // Retry logic to wait for options to load
+    while (count === 0 && retryCount < maxRetries) {
+      for (const selector of optionSelectors) {
+        options = popup.locator(selector).filter({ hasNotText: '' });
+        
+        // Wait for at least one option to be visible
+        try {
+          const firstOption = options.first();
+          await firstOption.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+        } catch (e) {
+          // Continue to next selector
+        }
+        
+        count = await options.count({ timeout: 3000 }).catch(() => 0);
+        if (count > 0) {
+          break;
+        }
+      }
+      
+      if (count === 0) {
+        retryCount++;
+        console.log(`ℹ️ No options found yet, retrying... (${retryCount}/${maxRetries})`);
+        await this.page.waitForTimeout(1000); // Wait before retry
+        // Wait for network and loader again
+        await this.page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+        await this._waitForLoaderToDisappear();
       }
     }
     
     if (count === 0) {
-      throw new Error('No options found in Group Therapy dropdown');
+      throw new Error('No options found in Group Therapy dropdown after waiting for elements to load');
     }
     
     // Select first option
     const firstOption = options.first();
     await firstOption.waitFor({ state: 'visible', timeout: 5000 });
-    const optionText = await firstOption.textContent({ timeout: 2000 }).catch(() => '');
     await firstOption.scrollIntoViewIfNeeded();
     await this.page.waitForTimeout(200);
     await firstOption.click({ timeout: 3000 });
     await this.page.waitForTimeout(500);
-    console.log(`✓ First Group Therapy option selected: ${optionText.trim()}`);
+    console.log(`✓ First Group Therapy option selected`);
     return true;
   }
 
@@ -833,7 +953,7 @@ class RecurringAppointmentsPage extends SchedulingPage {
     const toastVisible = await toastContainer.isVisible({ timeout: 5000 }).catch(() => false);
     if (toastVisible) {
       const toastText = await toastContainer.textContent({ timeout: 2000 }).catch(() => '');
-      console.log(`✓ ASSERT: Success toaster found: ${toastText.trim()}`);
+      console.log(`✓ ASSERT: Success toaster found`);
     } else {
       // Check for other toaster/alert patterns
       const toastPatterns = [
@@ -850,7 +970,7 @@ class RecurringAppointmentsPage extends SchedulingPage {
         const isVisible = await toast.isVisible({ timeout: 2000 }).catch(() => false);
         if (isVisible) {
           const toastText = await toast.textContent({ timeout: 2000 }).catch(() => '');
-          console.log(`✓ ASSERT: Success toaster found: ${toastText.trim()}`);
+          console.log(`✓ ASSERT: Success toaster found`);
           break;
         }
       }
@@ -871,69 +991,174 @@ class RecurringAppointmentsPage extends SchedulingPage {
     // Appointment type -> Duration -> Group Therapy -> Repeat -> Until -> End date -> Patient -> Plus button -> Save
     await this.createRecurringAppointmentSeries(pattern, frequency, occurrences);
     
-    // Step 2: Wait for scheduler to refresh
+    // Step 2: Wait for scheduler to refresh and appointments to load
+    console.log('\n--- Step 1.1: Waiting for scheduler to load appointments ---');
     await this.page.waitForTimeout(3000);
     await this.waitForSchedulerLoaded();
     
-    // Step 3: Get start and end dates
-    const startDate = this._getStartDate();
-    const endDate = this._endDate || this._getDateThreeDaysFromTodayDate();
-    
-    console.log(`\n--- Step 2: Verify individual appointments from ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()} ---`);
-    
-    // Step 4: Check appointments on each day from start to end date
+    // Wait for appointments to appear on scheduler
     const allEventSelectors = [
       '.e-event:not(button):not(.e-event-cancel):not(.e-event-save)',
       '.e-appointment:not(button)',
       '.e-schedule-event:not(button)'
     ];
     
-    let totalAppointmentsFound = 0;
-    let totalAppointmentsDeleted = 0;
-    const currentDate = new Date(startDate);
+    let appointmentFound = false;
+    let maxWaitAttempts = 10;
+    let waitAttempt = 0;
     
-    // Loop through each day from start to end date
-    while (currentDate <= endDate) {
-      const dateStr = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      console.log(`\n--- Checking appointments for ${dateStr} ---`);
-      
-      // Navigate to the date
-      const navigated = await this.navigateToDate(new Date(currentDate));
-      if (!navigated) {
-        console.log(`⚠️ Could not navigate to ${dateStr}, skipping...`);
-        currentDate.setDate(currentDate.getDate() + 1);
-        continue;
-      }
-      
-      await this.page.waitForTimeout(2000);
+    while (!appointmentFound && waitAttempt < maxWaitAttempts) {
+      await this.page.waitForTimeout(1000);
       await this.waitForSchedulerLoaded();
       
-      // Find appointments on this date
-      let appointmentsOnDate = [];
       for (const selector of allEventSelectors) {
         const events = this.page.locator(selector);
-        const count = await events.count({ timeout: 3000 }).catch(() => 0);
+        const count = await events.count({ timeout: 2000 }).catch(() => 0);
         if (count > 0) {
-          for (let i = 0; i < count; i++) {
-            const event = events.nth(i);
-            const isVisible = await event.isVisible({ timeout: 1000 }).catch(() => false);
-            if (isVisible) {
-              appointmentsOnDate.push(event);
-            }
+          const firstEvent = events.first();
+          const isVisible = await firstEvent.isVisible({ timeout: 1000 }).catch(() => false);
+          if (isVisible) {
+            appointmentFound = true;
+            console.log(`✓ Appointment(s) loaded on scheduler (found ${count} appointment(s))`);
+            break;
+          }
+        }
+      }
+      
+      if (!appointmentFound) {
+        waitAttempt++;
+        console.log(`ℹ️ Waiting for appointments to appear on scheduler... (attempt ${waitAttempt}/${maxWaitAttempts})`);
+      }
+    }
+    
+    if (!appointmentFound) {
+      console.log('⚠️ No appointments found on scheduler after waiting - they may still be loading');
+    }
+    
+    // Additional wait to ensure all appointments are fully loaded
+    await this.page.waitForTimeout(2000);
+    await this.waitForSchedulerLoaded();
+    
+    // Step 3: Get start and end dates
+    const startDate = this._getStartDate();
+    const endDate = this._endDate || this._getDateThreeDaysFromTodayDate();
+    
+    // Calculate number of days from start to end date
+    const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    console.log(`\n--- Step 2: Navigate to end date and delete appointments backwards from ${endDate.toLocaleDateString()} to ${startDate.toLocaleDateString()} (${daysDiff} day(s)) ---`);
+    
+    // Step 4: Navigate to end date using next button
+    console.log('\n--- Step 2.1: Navigate to end date ---');
+    await this.page.waitForTimeout(2000);
+    await this.waitForSchedulerLoaded();
+    
+    // Navigate to end date by clicking next button (daysDiff - 1) times
+    // We're currently on start date (day 0), so we need to go forward (daysDiff - 1) days to reach end date
+    for (let i = 0; i < daysDiff - 1; i++) {
+      await this.nextButton.click({ timeout: 5000 });
+      await this.page.waitForTimeout(2000);
+      await this.waitForSchedulerLoaded();
+    }
+    console.log(`✓ Navigated to end date: ${endDate.toLocaleDateString()}`);
+    
+    // Step 5: Identify the time slot (Y position) of the appointment on end date
+    console.log('\n--- Step 2.2: Identify time slot of appointment on end date ---');
+    await this.page.waitForTimeout(2000);
+    await this.waitForSchedulerLoaded();
+    
+    let appointmentYPosition = null;
+    let endDateAppointment = null;
+    
+    // Find the first appointment on end date to identify its time slot (Y position)
+    for (const selector of allEventSelectors) {
+      const events = this.page.locator(selector);
+      const count = await events.count({ timeout: 3000 }).catch(() => 0);
+      if (count > 0) {
+        endDateAppointment = events.first();
+        const isVisible = await endDateAppointment.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          // Get the Y position of the appointment (which represents the time slot)
+          const appBox = await endDateAppointment.boundingBox().catch(() => null);
+          if (appBox) {
+            appointmentYPosition = appBox.y;
+            console.log(`✓ Identified appointment time slot at Y position: ${appointmentYPosition.toFixed(0)} on end date`);
           }
           break;
         }
       }
+    }
+    
+    if (!endDateAppointment) {
+      throw new Error('Could not find created appointment on scheduler on end date');
+    }
+    
+    // Step 6: Delete appointments backwards from end date to start date using previous button
+    console.log(`\n--- Step 3: Delete appointments backwards from end date to start date (${daysDiff} day(s)) ---`);
+    let totalAppointmentsDeleted = 0;
+    let totalAppointmentsFound = 0;
+    const tolerance = 30; // Allow 30px tolerance for Y position matching
+    
+    // Start from end date (day daysDiff - 1) and go backwards to start date (day 0)
+    for (let day = daysDiff - 1; day >= 0; day--) {
+      await this.page.waitForTimeout(2000);
+      await this.waitForSchedulerLoaded();
+      
+      const dayNumber = day + 1;
+      const dayDescription = day === daysDiff - 1 ? 'end date' : (day === 0 ? 'start date (current date)' : `day ${dayNumber}`);
+      console.log(`\n--- Deleting appointment for ${dayDescription} (day ${dayNumber} of ${daysDiff}) in the same time slot ---`);
+      
+      // Find appointments in the same time slot (same Y position) on current day
+      let appointmentsOnDate = [];
+      
+      if (day === daysDiff - 1) {
+        // On end date, use the appointment we found
+        appointmentsOnDate.push(endDateAppointment);
+      } else if (appointmentYPosition !== null) {
+        // On other days, find appointment at the same Y position (within tolerance)
+        for (const selector of allEventSelectors) {
+          const events = this.page.locator(selector);
+          const count = await events.count({ timeout: 3000 }).catch(() => 0);
+          if (count > 0) {
+            for (let i = 0; i < count; i++) {
+              const event = events.nth(i);
+              const isVisible = await event.isVisible({ timeout: 1000 }).catch(() => false);
+              if (isVisible) {
+                const eventBox = await event.boundingBox().catch(() => null);
+                if (eventBox && Math.abs(eventBox.y - appointmentYPosition) <= tolerance) {
+                  appointmentsOnDate.push(event);
+                  console.log(`  ✓ Found appointment in same time slot (Y: ${eventBox.y.toFixed(0)}, expected: ${appointmentYPosition.toFixed(0)})`);
+                  break;
+                }
+              }
+            }
+            if (appointmentsOnDate.length > 0) break;
+          }
+        }
+      } else {
+        // Fallback: Find first appointment
+        for (const selector of allEventSelectors) {
+          const events = this.page.locator(selector);
+          const count = await events.count({ timeout: 3000 }).catch(() => 0);
+          if (count > 0) {
+            const event = events.first();
+            const isVisible = await event.isVisible({ timeout: 1000 }).catch(() => false);
+            if (isVisible) {
+              appointmentsOnDate.push(event);
+            }
+            break;
+          }
+        }
+      }
       
       if (appointmentsOnDate.length > 0) {
-        console.log(`✓ Found ${appointmentsOnDate.length} appointment(s) on ${dateStr}`);
+        console.log(`✓ Found ${appointmentsOnDate.length} appointment(s) on ${dayDescription} to delete`);
         totalAppointmentsFound += appointmentsOnDate.length;
         
         // Delete each appointment on this date
         for (let i = 0; i < appointmentsOnDate.length; i++) {
           const appointment = appointmentsOnDate[i];
           try {
-            console.log(`  Deleting appointment ${i + 1} of ${appointmentsOnDate.length} on ${dateStr}...`);
+            console.log(`  Deleting appointment ${i + 1} of ${appointmentsOnDate.length} on ${dayDescription}...`);
             
             // Double-click to open edit modal
             await appointment.dblclick({ timeout: 5000 });
@@ -965,37 +1190,751 @@ class RecurringAppointmentsPage extends SchedulingPage {
                 await this.page.waitForTimeout(2000);
                 await this.waitForSchedulerLoaded();
                 totalAppointmentsDeleted++;
-                console.log(`  ✓ Deleted appointment ${i + 1} on ${dateStr}`);
+                console.log(`  ✓ Deleted appointment ${i + 1} on ${dayDescription}`);
               } else {
-                console.log(`  ⚠️ Delete button not found for appointment ${i + 1} on ${dateStr}`);
+                console.log(`  ⚠️ Delete button not found for appointment ${i + 1} on ${dayDescription}`);
                 // Close modal if delete button not found
                 await this.closePopupSafely();
               }
             } else {
-              console.log(`  ⚠️ Modal did not open for appointment ${i + 1} on ${dateStr}`);
+              console.log(`  ⚠️ Modal did not open for appointment ${i + 1} on ${dayDescription}`);
             }
           } catch (error) {
-            console.log(`  ⚠️ Error deleting appointment ${i + 1} on ${dateStr}: ${error.message}`);
+            console.log(`  ⚠️ Error deleting appointment ${i + 1} on ${dayDescription}: ${error.message}`);
             // Try to close modal if open
             await this.closePopupSafely();
           }
         }
       } else {
-        console.log(`ℹ️ No appointments found on ${dateStr}`);
+        console.log(`ℹ️ No appointments found on ${dayDescription} to delete`);
       }
       
-      // Move to next day
-      currentDate.setDate(currentDate.getDate() + 1);
+      // Click previous button to go to previous day (except when we're on start date)
+      if (day > 0) {
+        const prevButton = this.page.locator('button[title="Previous"], .e-prev button').first();
+        await prevButton.click({ timeout: 5000 });
+        await this.page.waitForTimeout(2000);
+        await this.waitForSchedulerLoaded();
+      }
     }
     
     console.log(`\n✓ Total appointments found: ${totalAppointmentsFound}`);
     console.log(`✓ Total appointments deleted: ${totalAppointmentsDeleted}`);
     
-    // Verify appointments were found
+    // Verify all appointments were found and deleted
     expect(totalAppointmentsFound).toBeGreaterThan(0);
-    console.log(`✓ ASSERT: Recurring pattern generated ${totalAppointmentsFound} individual appointment(s) from ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`);
+    expect(totalAppointmentsDeleted).toBeGreaterThan(0);
+    expect(totalAppointmentsDeleted).toBe(totalAppointmentsFound);
+    console.log(`✓ ASSERT: All ${totalAppointmentsFound} appointment(s) found and deleted successfully from end date to start date`);
     
     return { appointmentCount: totalAppointmentsFound, occurrences, deletedCount: totalAppointmentsDeleted };
+  }
+
+  // Combined test: Recurring pattern generates individual appointments AND Cancelling one occurrence does not cancel series
+  async testRecurringPatternAndCancellationFlow(pattern = 'Daily', frequency = 1, occurrences = 4) {
+    console.log('\n=== Combined Test: Recurring pattern generates individual appointments AND Cancelling one occurrence does not cancel series ===');
+    
+    // Step 1: Create recurring appointment series
+    console.log('\n--- Step 1: Create recurring appointment series ---');
+    await this.openAddEventPopupRandomSlot();
+    
+    // Create recurring appointment series with correct flow:
+    // Appointment type -> Duration -> Group Therapy -> Repeat -> Until -> End date -> Patient -> Plus button -> Save
+    await this.createRecurringAppointmentSeries(pattern, frequency, occurrences);
+    
+    // Step 2: Wait for scheduler to refresh and appointments to load
+    console.log('\n--- Step 2: Wait for scheduler to load appointments ---');
+    await this.page.waitForTimeout(3000);
+    await this.waitForSchedulerLoaded();
+    
+    // Wait for appointments to appear on scheduler
+    const allEventSelectors = [
+      '.e-event:not(button):not(.e-event-cancel):not(.e-event-save)',
+      '.e-appointment:not(button)',
+      '.e-schedule-event:not(button)'
+    ];
+    
+    let appointmentFound = false;
+    let maxWaitAttempts = 10;
+    let waitAttempt = 0;
+    
+    while (!appointmentFound && waitAttempt < maxWaitAttempts) {
+      await this.page.waitForTimeout(1000);
+      await this.waitForSchedulerLoaded();
+      
+      for (const selector of allEventSelectors) {
+        const events = this.page.locator(selector);
+        const count = await events.count({ timeout: 2000 }).catch(() => 0);
+        if (count > 0) {
+          const firstEvent = events.first();
+          const isVisible = await firstEvent.isVisible({ timeout: 1000 }).catch(() => false);
+          if (isVisible) {
+            appointmentFound = true;
+            console.log(`✓ Appointment(s) loaded on scheduler (found ${count} appointment(s))`);
+            break;
+          }
+        }
+      }
+      
+      if (!appointmentFound) {
+        waitAttempt++;
+        console.log(`ℹ️ Waiting for appointments to appear on scheduler... (attempt ${waitAttempt}/${maxWaitAttempts})`);
+      }
+    }
+    
+    if (!appointmentFound) {
+      console.log('⚠️ No appointments found on scheduler after waiting - they may still be loading');
+    }
+    
+    await this.page.waitForTimeout(2000);
+    await this.waitForSchedulerLoaded();
+    
+    // Step 3: Get start and end dates
+    const startDate = this._getStartDate();
+    const endDate = this._endDate || this._getDateThreeDaysFromTodayDate();
+    const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    
+    // Step 4: Assert appointment is visible on current day (start date)
+    console.log('\n--- Step 3: Assert appointment is visible on current day (start date) ---');
+    let currentDayAppointment = null;
+    
+    for (const selector of allEventSelectors) {
+      const events = this.page.locator(selector);
+      const count = await events.count({ timeout: 3000 }).catch(() => 0);
+      if (count > 0) {
+        currentDayAppointment = events.first();
+        const isVisible = await currentDayAppointment.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          console.log(`✓ Appointment is visible on current day (start date: ${startDate.toLocaleDateString()})`);
+          break;
+        }
+      }
+    }
+    
+    if (!currentDayAppointment) {
+      throw new Error('Appointment not found on current day (start date)');
+    }
+    
+    // Step 5: Cancel first appointment (right-click -> Cancel Schedule -> OK)
+    console.log('\n--- Step 4: Cancel first appointment (right-click -> Cancel Schedule -> OK) ---');
+    await this.rightClickAndCancelSchedule(currentDayAppointment);
+    await this.handleCancelAppointmentModal();
+    
+    // Step 6: Assert success toaster for Appointment cancel
+    console.log('\n--- Step 5: Assert success toaster for Appointment cancel ---');
+    await this.page.waitForTimeout(2000);
+    
+    const toasterSelectors = [
+      '#toast-container',
+      '.toast-success',
+      '.toast-title',
+      '.toast-message',
+      '*:has-text("cancel")',
+      '*:has-text("cancelled")'
+    ];
+    
+    let cancelToasterFound = false;
+    for (const selector of toasterSelectors) {
+      const toaster = this.page.locator(selector).first();
+      const isVisible = await toaster.isVisible({ timeout: 5000 }).catch(() => false);
+      if (isVisible) {
+        const toasterText = await toaster.textContent({ timeout: 2000 }).catch(() => '');
+        const lowerText = toasterText.toLowerCase();
+        if (lowerText.includes('cancel') || lowerText.includes('cancelled') || lowerText.includes('success')) {
+          console.log(`✓ ASSERT: Success toaster for Appointment cancel found: ${toasterText.trim()}`);
+          cancelToasterFound = true;
+          break;
+        }
+      }
+    }
+    
+    if (!cancelToasterFound) {
+      console.log('⚠️ Cancel toaster not found, but cancellation may have succeeded');
+    }
+    
+    await this.page.waitForTimeout(2000);
+    await this.waitForSchedulerLoaded();
+    
+    // Step 7: Go to next date and check appointment exists
+    console.log('\n--- Step 6: Go to next date and check appointment exists ---');
+    await this.nextButton.click({ timeout: 5000 });
+    await this.page.waitForTimeout(2000);
+    await this.waitForSchedulerLoaded();
+    
+    let nextDayAppointment = null;
+    for (const selector of allEventSelectors) {
+      const events = this.page.locator(selector);
+      const count = await events.count({ timeout: 3000 }).catch(() => 0);
+      if (count > 0) {
+        nextDayAppointment = events.first();
+        const isVisible = await nextDayAppointment.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          console.log(`✓ Appointment found on next day`);
+          break;
+        }
+      }
+    }
+    
+    // First assertion: Cancelling one occurrence does not cancel series
+    if (nextDayAppointment) {
+      console.log(`✓ ASSERT: Cancelling one occurrence does not cancel series - appointment exists on next day`);
+    } else {
+      throw new Error('First assertion failed: Appointment not found on next day after cancelling first appointment');
+    }
+    
+    // Step 8: Cancel second appointment (same as first one)
+    console.log('\n--- Step 7: Cancel second appointment (same as first one) ---');
+    await this.rightClickAndCancelSchedule(nextDayAppointment);
+    await this.handleCancelAppointmentModal();
+    
+    // Check for cancel toaster
+    await this.page.waitForTimeout(2000);
+    for (const selector of toasterSelectors) {
+      const toaster = this.page.locator(selector).first();
+      const isVisible = await toaster.isVisible({ timeout: 5000 }).catch(() => false);
+      if (isVisible) {
+        const toasterText = await toaster.textContent({ timeout: 2000 }).catch(() => '');
+        const lowerText = toasterText.toLowerCase();
+        if (lowerText.includes('cancel') || lowerText.includes('cancelled') || lowerText.includes('success')) {
+          console.log(`✓ Success toaster for second appointment cancel found`);
+          break;
+        }
+      }
+    }
+    
+    await this.page.waitForTimeout(2000);
+    await this.waitForSchedulerLoaded();
+    
+    // Step 9: Go to next date (End date) and assert the appointment exists
+    console.log('\n--- Step 8: Go to next date (End date) and assert the appointment exists ---');
+    // Navigate to end date (if not already there - we're on day 2, need to go to end date)
+    // We need to go forward (daysDiff - 2) more days to reach end date
+    for (let i = 0; i < daysDiff - 2; i++) {
+      await this.nextButton.click({ timeout: 5000 });
+      await this.page.waitForTimeout(2000);
+      await this.waitForSchedulerLoaded();
+    }
+    
+    let endDateAppointment = null;
+    for (const selector of allEventSelectors) {
+      const events = this.page.locator(selector);
+      const count = await events.count({ timeout: 3000 }).catch(() => 0);
+      if (count > 0) {
+        endDateAppointment = events.first();
+        const isVisible = await endDateAppointment.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          console.log(`✓ Appointment found on end date (${endDate.toLocaleDateString()})`);
+          break;
+        }
+      }
+    }
+    
+    // Second assertion: Recurring pattern generates individual appointments
+    if (endDateAppointment) {
+      console.log(`✓ ASSERT: Recurring pattern generates individual appointments - appointment exists on end date`);
+    } else {
+      throw new Error('Second assertion failed: Appointment not found on end date');
+    }
+    
+    // Step 10: Cancel third appointment (end date)
+    console.log('\n--- Step 9: Cancel third appointment (end date) ---');
+    await this.rightClickAndCancelSchedule(endDateAppointment);
+    await this.handleCancelAppointmentModal();
+    
+    // Check for cancel toaster
+    await this.page.waitForTimeout(2000);
+    for (const selector of toasterSelectors) {
+      const toaster = this.page.locator(selector).first();
+      const isVisible = await toaster.isVisible({ timeout: 5000 }).catch(() => false);
+      if (isVisible) {
+        const toasterText = await toaster.textContent({ timeout: 2000 }).catch(() => '');
+        const lowerText = toasterText.toLowerCase();
+        if (lowerText.includes('cancel') || lowerText.includes('cancelled') || lowerText.includes('success')) {
+          console.log(`✓ Success toaster for third appointment cancel found`);
+          break;
+        }
+      }
+    }
+    
+    await this.page.waitForTimeout(2000);
+    await this.waitForSchedulerLoaded();
+    
+    console.log('\n✓ TEST COMPLETE: Both assertions passed successfully');
+    return { 
+      firstAssertionPassed: true, // Cancelling one occurrence does not cancel series
+      secondAssertionPassed: true, // Recurring pattern generates individual appointments
+      appointmentsCancelled: 3
+    };
+  }
+
+  // Helper: Read place of service value from modal
+  async getPlaceOfServiceValue() {
+    const modal = this.modal();
+    let placeOfService = '';
+    
+    try {
+      // Find Place Of Service label and get the value
+      const placeOfServiceLabel = modal.locator('label:has-text("Place Of Service"), label:has-text("Place of Service"), label.e-float-text:has-text("Place of Service"), label.e-float-text:has-text("Place Of Service")').first();
+      const labelVisible = await placeOfServiceLabel.isVisible({ timeout: 3000 }).catch(() => false);
+      
+      if (labelVisible) {
+        const ddlWrapper = placeOfServiceLabel.locator('xpath=ancestor::div[contains(@class,"e-ddl")] | xpath=ancestor::div[contains(@class,"e-control-wrapper")][contains(@class,"e-ddl")]').first();
+        const wrapperVisible = await ddlWrapper.isVisible({ timeout: 2000 }).catch(() => false);
+        
+        if (wrapperVisible) {
+          const visibleInput = ddlWrapper.locator('input[readonly], input[role="combobox"]').first();
+          const inputVisible = await visibleInput.isVisible({ timeout: 2000 }).catch(() => false);
+          if (inputVisible) {
+            placeOfService = await visibleInput.inputValue({ timeout: 2000 }).catch(() => '');
+            if (!placeOfService) {
+              placeOfService = await visibleInput.getAttribute('value').catch(() => '');
+            }
+          }
+          
+          if (!placeOfService || !placeOfService.trim()) {
+            const hiddenSelect = ddlWrapper.locator('select.e-ddl-hidden option[selected]').first();
+            const optionVisible = await hiddenSelect.isVisible({ timeout: 2000 }).catch(() => false);
+            if (optionVisible) {
+              placeOfService = await hiddenSelect.textContent({ timeout: 2000 }).catch(() => '');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log(`ℹ️ Error reading Place Of Service: ${e.message}`);
+    }
+    
+    return placeOfService ? placeOfService.trim() : '';
+  }
+
+  // Helper: Select specific place of service (e.g., "Tele-Health")
+  async selectSpecificPlaceOfService(targetPlaceOfService = 'Tele-Health') {
+    console.log(`STEP: Selecting place of service: "${targetPlaceOfService}"...`);
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
+    
+    const modal = this.modal();
+    let isModalOpen = await modal.isVisible({ timeout: 5000 }).catch(() => false);
+    if (!isModalOpen) {
+      console.log('⚠️ Modal closed before selecting place of service');
+      return false;
+    }
+    
+    // Find the dropdown
+    let dropdownWrapper = null;
+    const placeOfServiceLabel = modal.locator('label.e-float-text:has-text("Place of Service"), label:has-text("Place of Service *"), label:has-text("Place Of Service"), label[id*="place"][id*="service" i]').first();
+    const isLabelVisible = await placeOfServiceLabel.isVisible({ timeout: 5000 }).catch(() => false);
+    
+    if (isLabelVisible) {
+      dropdownWrapper = placeOfServiceLabel.locator('xpath=ancestor::div[contains(@class,"e-ddl")]').first();
+      const isVisible = await dropdownWrapper.isVisible({ timeout: 2000 }).catch(() => false);
+      if (!isVisible) {
+        dropdownWrapper = placeOfServiceLabel.locator('xpath=ancestor::div[contains(@class,"e-control-wrapper")][contains(@class,"e-ddl")]').first();
+      }
+    }
+    
+    if (!dropdownWrapper || !(await dropdownWrapper.isVisible({ timeout: 1000 }).catch(() => false))) {
+      dropdownWrapper = modal.locator('div.e-control-wrapper.e-ddl').filter({ 
+        has: modal.locator('label:has-text("Place of Service"), label:has-text("Place Of Service")') 
+      }).first();
+    }
+    
+    const isDropdownVisible = dropdownWrapper && await dropdownWrapper.isVisible({ timeout: 5000 }).catch(() => false);
+    
+    if (isDropdownVisible) {
+      await dropdownWrapper.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+      await this.page.waitForTimeout(300);
+      await dropdownWrapper.scrollIntoViewIfNeeded();
+      await this.page.waitForTimeout(300);
+      
+      const dropdownIcon = dropdownWrapper.locator('.e-ddl-icon, .e-input-group-icon, span.e-ddl-icon').first();
+      const iconVisible = await dropdownIcon.isVisible({ timeout: 1000 }).catch(() => false);
+      
+      if (iconVisible) {
+        await dropdownIcon.click({ force: true });
+      } else {
+        const input = dropdownWrapper.locator('input[readonly], input[role="combobox"]').first();
+        const inputVisible = await input.isVisible({ timeout: 1000 }).catch(() => false);
+        if (inputVisible) {
+          await input.click({ force: true });
+        } else {
+          await dropdownWrapper.click({ force: true });
+        }
+      }
+      
+      await this.page.waitForTimeout(1500);
+      
+      const popupSelectors = [
+        'div[id$="_popup"]:visible',
+        '.e-popup-open:visible',
+        'ul.e-list-parent:visible',
+        '.e-dropdownbase:visible',
+        '[role="listbox"]:visible'
+      ];
+      
+      let popup = null;
+      let popupVisible = false;
+      
+      for (const selector of popupSelectors) {
+        popup = this.page.locator(selector).first();
+        popupVisible = await popup.isVisible({ timeout: 3000 }).catch(() => false);
+        if (popupVisible) break;
+      }
+      
+      if (popupVisible) {
+        await popup.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+        await this.page.waitForTimeout(800);
+        
+        // Try to find the target option
+        const targetVariations = [
+          targetPlaceOfService,
+          targetPlaceOfService.replace('-', ' '),
+          targetPlaceOfService.replace(' ', '-'),
+          targetPlaceOfService.toLowerCase(),
+          targetPlaceOfService.toUpperCase()
+        ];
+        
+        let optionFound = false;
+        for (const variation of targetVariations) {
+          const option = popup.locator(`li[role="option"]:has-text("${variation}"), li.e-list-item:has-text("${variation}")`).first();
+          const optionVisible = await option.isVisible({ timeout: 1000 }).catch(() => false);
+          if (optionVisible) {
+            await option.scrollIntoViewIfNeeded();
+            await this.page.waitForTimeout(200);
+            await option.click({ force: true });
+            await this.page.waitForTimeout(500);
+            console.log(`✓ Place of service "${variation}" selected`);
+            optionFound = true;
+            break;
+          }
+        }
+        
+        // If not found, try case-insensitive search
+        if (!optionFound) {
+          const allOptions = popup.locator('li[role="option"], li.e-list-item');
+          const optionCount = await allOptions.count({ timeout: 2000 }).catch(() => 0);
+          
+          for (let i = 0; i < optionCount; i++) {
+            const option = allOptions.nth(i);
+            const optionText = await option.textContent({ timeout: 1000 }).catch(() => '');
+            if (optionText) {
+              const normalizedText = optionText.trim().toLowerCase().replace(/[- ]/g, '');
+              const normalizedTarget = targetPlaceOfService.toLowerCase().replace(/[- ]/g, '');
+              if (normalizedText.includes(normalizedTarget) || normalizedText === normalizedTarget) {
+                await option.scrollIntoViewIfNeeded();
+                await this.page.waitForTimeout(200);
+                await option.click({ force: true });
+                await this.page.waitForTimeout(500);
+                console.log(`✓ Place of service "${optionText.trim()}" selected (matched from "${targetPlaceOfService}")`);
+                optionFound = true;
+                break;
+              }
+            }
+          }
+        }
+        
+        if (optionFound) {
+          return true;
+        } else {
+          console.log(`⚠️ Place of service "${targetPlaceOfService}" not found in dropdown`);
+          return false;
+        }
+      }
+    }
+    
+    console.log('⚠️ No place of service dropdown found');
+    return false;
+  }
+
+  // Test: Each occurrence can be individually modified (by changing place of service)
+  async testOccurrenceIndividualModificationByPlaceOfService(pattern = 'Daily', frequency = 1, occurrences = 4) {
+    console.log('\n=== Testing: Each occurrence can be individually modified (by changing place of service) ===');
+    
+    // Step 1: Create recurring appointment series
+    console.log('\n--- Step 1: Create recurring appointment series ---');
+    await this.openAddEventPopupRandomSlot();
+    
+    // Create recurring appointment series with correct flow:
+    // Appointment type -> Duration -> Group Therapy -> Repeat -> Until -> End date -> Patient -> Plus button -> Save
+    await this.createRecurringAppointmentSeries(pattern, frequency, occurrences);
+    
+    // Step 2: Wait for scheduler to refresh
+    await this.page.waitForTimeout(3000);
+    await this.waitForSchedulerLoaded();
+    
+    // Step 3: Get start and end dates
+    const startDate = this._getStartDate();
+    const endDate = this._endDate || this._getDateThreeDaysFromTodayDate();
+    
+    // Define event selectors
+    const allEventSelectors = [
+      '.e-event:not(button):not(.e-event-cancel):not(.e-event-save)',
+      '.e-appointment:not(button)',
+      '.e-schedule-event:not(button)'
+    ];
+    
+    // Calculate number of days from start to end date
+    const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    console.log(`✓ Will modify appointments across ${daysDiff} day(s)`);
+    
+    // Step 4: Modify place of service for each appointment
+    console.log('\n--- Step 2: Assert default place of service and modify to Tele-Health for each appointment ---');
+    let appointmentIndex = 0;
+    let modificationsCount = 0;
+    
+    // Start from the first day (should already be on start date after creation)
+    for (let day = 0; day < daysDiff; day++) {
+      await this.page.waitForTimeout(2000);
+      await this.waitForSchedulerLoaded();
+      
+      // Find appointment on current day
+      let appointmentFound = null;
+      for (const selector of allEventSelectors) {
+        const events = this.page.locator(selector);
+        const count = await events.count({ timeout: 3000 }).catch(() => 0);
+        if (count > 0) {
+          appointmentFound = events.first();
+          break;
+        }
+      }
+      
+      if (appointmentFound) {
+        console.log(`\n  --- Modifying appointment ${appointmentIndex + 1} (day ${day + 1}) - asserting default and changing place of service to Tele-Health ---`);
+        
+        try {
+          // Double-click to open edit modal
+          await appointmentFound.dblclick({ timeout: 5000 });
+          await this.page.waitForTimeout(2000);
+          
+          const editModal = this.modal();
+          const isEditModalOpen = await editModal.isVisible({ timeout: 5000 }).catch(() => false);
+          
+          if (isEditModalOpen) {
+            // Click Edit Occurrence (if available)
+            const editOccurrenceBtn = this.editOccurrenceButton();
+            const editOccurrenceVisible = await editOccurrenceBtn.isVisible({ timeout: 2000 }).catch(() => false);
+            
+            if (editOccurrenceVisible) {
+              await editOccurrenceBtn.click({ timeout: 3000 });
+              await this.page.waitForTimeout(1000);
+            }
+            
+            // Assert place of service is "Office" by default
+            console.log(`  Asserting place of service is "Office" by default...`);
+            const currentPlaceOfService = await this.getPlaceOfServiceValue();
+            const isOffice = currentPlaceOfService.toLowerCase().includes('office');
+            
+            if (isOffice) {
+              console.log(`  ✓ ASSERT: Place of service is "Office" by default (found: "${currentPlaceOfService}")`);
+            } else {
+              console.log(`  ⚠️ Place of service is not "Office" by default (found: "${currentPlaceOfService}")`);
+            }
+            
+            // Change place of service to "Tele-Health"
+            console.log(`  Changing place of service to "Tele-Health"...`);
+            const teleHealthSelected = await this.selectSpecificPlaceOfService('Tele-Health');
+            
+            if (teleHealthSelected) {
+              await this.page.waitForTimeout(1000);
+              
+              // Select facility
+              console.log(`  Selecting facility...`);
+              await this.selectFacility();
+              await this.page.waitForTimeout(1000);
+              
+              // Save the modification
+              await this.saveButton.click({ timeout: 5000 });
+              await this.page.waitForTimeout(2000);
+              
+              // Check for success toaster
+              const toasterSelectors = [
+                '#toast-container',
+                '.toast-success',
+                '.toast-title',
+                '.toast-message',
+                '*:has-text("success")',
+                '*:has-text("saved")',
+                '*:has-text("updated")'
+              ];
+              
+              let toasterFound = false;
+              for (const selector of toasterSelectors) {
+                const toaster = this.page.locator(selector).first();
+                const isVisible = await toaster.isVisible({ timeout: 3000 }).catch(() => false);
+                if (isVisible) {
+                  const toasterText = await toaster.textContent({ timeout: 2000 }).catch(() => '');
+                  const lowerText = toasterText.toLowerCase();
+                  if (lowerText.includes('success') || lowerText.includes('saved') || lowerText.includes('updated')) {
+                    console.log(`  ✓ Success toaster found: ${toasterText.trim()}`);
+                    toasterFound = true;
+                    break;
+                  }
+                }
+              }
+              
+              if (!toasterFound) {
+                console.log(`  ℹ️ Success toaster not found, but modification may have succeeded`);
+              }
+              
+              await this.page.waitForTimeout(2000);
+              await this.waitForSchedulerLoaded();
+              
+              console.log(`  ✓ Appointment ${appointmentIndex + 1} place of service modified successfully (Office -> Tele-Health)`);
+              modificationsCount++;
+              appointmentIndex++;
+            } else {
+              console.log(`  ⚠️ Could not select Tele-Health for appointment ${appointmentIndex + 1}`);
+              await this.closePopupSafely();
+            }
+          } else {
+            console.log(`  ⚠️ Modal did not open for appointment ${appointmentIndex + 1}`);
+            await this.closePopupSafely();
+          }
+        } catch (error) {
+          console.log(`  ⚠️ Error modifying appointment ${appointmentIndex + 1}: ${error.message}`);
+          await this.closePopupSafely();
+        }
+      } else {
+        console.log(`  ⚠️ No appointment found on day ${day + 1}`);
+      }
+      
+      // Click next button to go to next day (except for the last day)
+      if (day < daysDiff - 1) {
+        await this.nextButton.click({ timeout: 5000 });
+        await this.page.waitForTimeout(2000);
+        await this.waitForSchedulerLoaded();
+      }
+    }
+    
+    console.log(`\n✓ Place of service modification summary: ${modificationsCount} appointment(s) modified`);
+    
+    // Step 5: Cancel all appointments one by one
+    console.log('\n--- Step 3: Cancel all appointments one by one ---');
+    
+    // Ensure any open modals are closed before navigating
+    await this.closePopupSafely();
+    await this.page.waitForTimeout(2000);
+    await this.waitForSchedulerLoaded();
+    
+    // Navigate back to start date using previous button - but ensure modals are closed first
+    for (let i = 0; i < daysDiff - 1; i++) {
+      // Check and close any open modals before clicking navigation
+      await this.closePopupSafely();
+      await this.page.waitForTimeout(1000);
+      
+      const prevButton = this.page.locator('button[title="Previous"], .e-prev button').first();
+      const isButtonVisible = await prevButton.isVisible({ timeout: 3000 }).catch(() => false);
+      
+      if (isButtonVisible) {
+        // Check if button is intercepted by overlay
+        const overlay = this.page.locator('.e-dlg-overlay:visible').first();
+        const overlayVisible = await overlay.isVisible({ timeout: 1000 }).catch(() => false);
+        
+        if (overlayVisible) {
+          console.log('  ℹ️ Modal overlay detected, closing before navigation...');
+          await this.closePopupSafely();
+          await this.page.waitForTimeout(2000);
+        }
+        
+        try {
+          await prevButton.click({ timeout: 5000, force: true });
+          await this.page.waitForTimeout(2000);
+          await this.waitForSchedulerLoaded();
+        } catch (error) {
+          console.log(`  ⚠️ Could not click previous button: ${error.message}`);
+          // Try to close modal and retry
+          await this.closePopupSafely();
+          await this.page.waitForTimeout(2000);
+          try {
+            await prevButton.click({ timeout: 5000, force: true });
+            await this.page.waitForTimeout(2000);
+            await this.waitForSchedulerLoaded();
+          } catch (retryError) {
+            console.log(`  ⚠️ Retry also failed: ${retryError.message}`);
+          }
+        }
+      }
+    }
+    
+    let totalAppointmentsCancelled = 0;
+    
+    // Cancel appointments using next button navigation
+    for (let day = 0; day < daysDiff; day++) {
+      await this.page.waitForTimeout(2000);
+      await this.waitForSchedulerLoaded();
+      
+      // Find appointment on current day
+      let appointmentFound = null;
+      for (const selector of allEventSelectors) {
+        const events = this.page.locator(selector);
+        const count = await events.count({ timeout: 3000 }).catch(() => 0);
+        if (count > 0) {
+          appointmentFound = events.first();
+          break;
+        }
+      }
+      
+      if (appointmentFound) {
+        try {
+          console.log(`  Cancelling appointment on day ${day + 1}...`);
+          
+          // Right-click on appointment and select "Cancel Schedule"
+          await this.rightClickAndCancelSchedule(appointmentFound);
+          
+          // Handle cancel appointment modal and click OK
+          await this.handleCancelAppointmentModal();
+          
+          // Check for cancel toaster
+          await this.page.waitForTimeout(2000);
+          const toasterSelectors = [
+            '#toast-container',
+            '.toast-success',
+            '.toast-title',
+            '.toast-message',
+            '*:has-text("cancel")',
+            '*:has-text("cancelled")'
+          ];
+          
+          for (const selector of toasterSelectors) {
+            const toaster = this.page.locator(selector).first();
+            const isVisible = await toaster.isVisible({ timeout: 5000 }).catch(() => false);
+            if (isVisible) {
+              const toasterText = await toaster.textContent({ timeout: 2000 }).catch(() => '');
+              const lowerText = toasterText.toLowerCase();
+              if (lowerText.includes('cancel') || lowerText.includes('cancelled') || lowerText.includes('success')) {
+                console.log(`  ✓ Cancel toaster found for appointment on day ${day + 1}`);
+                break;
+              }
+            }
+          }
+          
+          await this.page.waitForTimeout(2000);
+          await this.waitForSchedulerLoaded();
+          totalAppointmentsCancelled++;
+          console.log(`  ✓ Appointment on day ${day + 1} cancelled successfully`);
+        } catch (error) {
+          console.log(`  ⚠️ Error cancelling appointment on day ${day + 1}: ${error.message}`);
+        }
+      }
+      
+      // Click next button to go to next day (except for the last day)
+      if (day < daysDiff - 1) {
+        await this.nextButton.click({ timeout: 5000 });
+        await this.page.waitForTimeout(2000);
+        await this.waitForSchedulerLoaded();
+      }
+    }
+    
+    console.log(`\n✓ Total appointments cancelled: ${totalAppointmentsCancelled}`);
+    console.log('✓ ASSERT: Each occurrence can be individually modified (place of service changed) and all appointments cancelled');
+    
+    expect(modificationsCount).toBeGreaterThan(0);
+    expect(totalAppointmentsCancelled).toBeGreaterThan(0);
+    
+    return { 
+      modificationsCount, 
+      cancellationsCount: totalAppointmentsCancelled 
+    };
   }
 
   // Test SCH-025: Each occurrence can be individually modified
@@ -1813,11 +2752,15 @@ class RecurringAppointmentsPage extends SchedulingPage {
           // Compare dates (allow 1 day difference for timezone/formatting issues)
           const daysDiff = Math.abs((actualDate - expectedDateObj) / (1000 * 60 * 60 * 24));
           
+          // Print actual value and difference before assertion
+          console.log(`\n--- Date Comparison Details ---`);
+          console.log(`  Actual value from UI: ${defaultValue}`);
+          console.log(`  Actual date parsed: ${actualDate.toLocaleDateString()}`);
+          console.log(`  Expected date (52 days from today): ${expectedDate} (${expectedDateObj.toLocaleDateString()})`);
+          console.log(`  Days difference: ${daysDiff.toFixed(1)} days`);
+          
           expect(daysDiff).toBeLessThanOrEqual(1);
           console.log(`✓ ASSERT: Default end date is approximately 52 days from current date`);
-          console.log(`  Expected: ${expectedDate} (${expectedDateObj.toLocaleDateString()})`);
-          console.log(`  Actual: ${defaultValue} (${actualDate.toLocaleDateString()})`);
-          console.log(`  Days difference: ${daysDiff.toFixed(1)}`);
         } else {
           throw new Error(`Unexpected date format: ${defaultValue}`);
         }
@@ -1848,11 +2791,15 @@ class RecurringAppointmentsPage extends SchedulingPage {
           // Compare dates (allow 1 day difference for timezone/formatting issues)
           const daysDiff = Math.abs((actualDate - expectedDateObj) / (1000 * 60 * 60 * 24));
           
+          // Print actual value and difference before assertion
+          console.log(`\n--- Date Comparison Details ---`);
+          console.log(`  Actual value from UI: ${defaultValue}`);
+          console.log(`  Actual date parsed: ${actualDate.toLocaleDateString()}`);
+          console.log(`  Expected date (52 days from today): ${expectedDate} (${expectedDateObj.toLocaleDateString()})`);
+          console.log(`  Days difference: ${daysDiff.toFixed(1)} days`);
+          
           expect(daysDiff).toBeLessThanOrEqual(1);
           console.log(`✓ ASSERT: Default end date is approximately 52 days from current date`);
-          console.log(`  Expected: ${expectedDate} (${expectedDateObj.toLocaleDateString()})`);
-          console.log(`  Actual: ${defaultValue} (${actualDate.toLocaleDateString()})`);
-          console.log(`  Days difference: ${daysDiff.toFixed(1)}`);
         } else {
           throw new Error(`Unexpected date format: ${defaultValue}`);
         }

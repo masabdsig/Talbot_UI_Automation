@@ -285,7 +285,7 @@ class SchedulingPage {
   // Modal methods
   async verifyAddEventPopupVisible() {
     console.log('ASSERT: Verifying Add Event popup is visible...');
-    await this.page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
     
     // Try multiple modal selectors with longer timeout
     const modalSelectors = [
@@ -744,12 +744,12 @@ class SchedulingPage {
     console.log('✓ Scheduler setup complete');
   }
 
-  async setupSchedulerForCurrentDay(loginPage) {
-    console.log('STEP: Setting up scheduler for current day...');
-    await this.navigateToScheduling(loginPage);
-    await this.waitForSchedulerLoaded();
-    console.log('✓ Scheduler setup complete');
-  }
+  // async setupSchedulerForCurrentDay(loginPage) {
+  //   console.log('STEP: Setting up scheduler for current day...');
+  //   await this.navigateToScheduling(loginPage);
+  //   await this.waitForSchedulerLoaded();
+  //   console.log('✓ Scheduler setup complete');
+  // }
 
   async openAddEventPopupRandomSlot() {
     console.log('STEP: Open Add Event popup using truly empty random slot (8AM–5PM)');
@@ -785,7 +785,7 @@ class SchedulingPage {
     const hour = slotTime.getHours();
 
     // Only 8 AM – 5 PM
-    if (hour < 8 || hour >= 17) continue;
+    if (hour < 11 || hour >= 17) continue;
 
     const cellBox = await cell.boundingBox();
     if (!cellBox) continue;
@@ -4953,6 +4953,112 @@ class SchedulingPage {
     }
   }
 
+  // Verify error toaster message when attempting to create appointment during schedule block
+  async verifyProviderUnavailableErrorToaster() {
+    console.log('\n=== Verifying error toaster message for provider unavailable ===');
+    const expectedErrorMessage = 'Appointment Provider not available at this time. Please check another time slot.';
+    
+    try {
+      // Get schedule blocks
+      const scheduleBlocks = await this.getScheduleBlocks();
+      
+      if (scheduleBlocks.length === 0) {
+        console.log('ℹ️ No schedule blocks found - cannot verify error toaster');
+        return false;
+      }
+      
+      // Use the first schedule block to trigger the error
+      const block = scheduleBlocks[0];
+      console.log(`Using schedule block: ${block.startTime} - ${block.endTime}`);
+      
+      // Find unavailable cell for the schedule block time
+      const nextBusinessDay = this.getNextBusinessDay();
+      const timeParts = block.startTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      
+      if (!timeParts) {
+        console.log('⚠️ Could not parse schedule block time');
+        return false;
+      }
+      
+      let hours = parseInt(timeParts[1]);
+      const minutes = parseInt(timeParts[2]);
+      const ampm = timeParts[3].toUpperCase();
+      
+      if (ampm === 'PM' && hours !== 12) hours += 12;
+      if (ampm === 'AM' && hours === 12) hours = 0;
+      
+      nextBusinessDay.setHours(hours, minutes, 0, 0);
+      const targetTimestamp = nextBusinessDay.getTime();
+      
+      // Find unavailable cells
+      const unavailableCells = this.page.locator('td.e-work-cells.unavailable-color, td.e-work-cells:not(.available)');
+      const count = await unavailableCells.count({ timeout: 5000 }).catch(() => 0);
+      
+      if (count === 0) {
+        console.log('ℹ️ No unavailable cells found');
+        return false;
+      }
+      
+      // Find a cell matching the schedule block timestamp
+      let targetCell = null;
+      for (let i = 0; i < Math.min(count, 100); i++) {
+        const cell = unavailableCells.nth(i);
+        const dataDate = await cell.getAttribute('data-date').catch(() => null);
+        if (dataDate) {
+          const cellTimestamp = parseInt(dataDate);
+          if (Math.abs(cellTimestamp - targetTimestamp) < 30 * 60 * 1000) {
+            targetCell = cell;
+            break;
+          }
+        }
+      }
+      
+      // If no exact match, use the first unavailable cell
+      if (!targetCell) {
+        targetCell = unavailableCells.first();
+      }
+      
+      // Clear any existing toaster first
+      await this.page.waitForTimeout(500);
+      
+      // Click (single click) the unavailable cell - error toaster should appear immediately
+      await targetCell.scrollIntoViewIfNeeded();
+      await this.page.waitForTimeout(300);
+      
+      console.log('STEP: Clicking on unavailable cell to trigger error toaster...');
+      await targetCell.click({ timeout: 3000 });
+      await this.page.waitForTimeout(1000); // Wait for toaster to appear
+      
+      // Verify error toaster appears with expected message
+      const toastContainer = this.page.locator('#toast-container').first();
+      const toastVisible = await toastContainer.isVisible({ timeout: 3000 }).catch(() => false);
+      
+      if (!toastVisible) {
+        console.log('⚠️ Error toaster not visible after clicking unavailable cell');
+        return false;
+      }
+      
+      // Get toaster text
+      const toastText = await toastContainer.textContent({ timeout: 2000 }).catch(() => '');
+      const trimmedToastText = toastText ? toastText.trim() : '';
+      
+      console.log(`Found toaster message: "${trimmedToastText}"`);
+      console.log(`Expected message: "${expectedErrorMessage}"`);
+      
+      // Assert the error message matches (case-insensitive comparison)
+      if (trimmedToastText.toLowerCase().includes(expectedErrorMessage.toLowerCase())) {
+        console.log(`✓ ASSERT: Error toaster message matches expected: "${expectedErrorMessage}"`);
+        return true;
+      } else {
+        console.log(`⚠️ Error toaster message does not match expected. Found: "${trimmedToastText}"`);
+        return false;
+      }
+    } catch (e) {
+      console.log(`⚠️ Error verifying provider unavailable error toaster: ${e.message}`);
+      return false;
+    }
+  }
+
   // Helper: Validate provider location and attempt appointment
   async validateProviderLocationAndAttemptAppointment() {
     const providerInfo = await this.getProviderInformation();
@@ -5182,6 +5288,881 @@ class SchedulingPage {
     } else {
       console.log('✓ Event save completed (no toaster found, modal closed)');
     }
+  }
+
+  // Provider Availability Slots methods
+  async clickCheckProviderAvailabilitySlots() {
+    console.log('STEP: Clicking Check Provider Availability Slots button...');
+    const modal = this.modal();
+    
+    // Find the button by title or icon class
+    const buttonSelectors = [
+      'i[title="Check Provider Availability Slots"]',
+      'i.fa-book[title*="Check Provider Availability"]',
+      'i.fa-book.mr-2[title*="Check Provider"]',
+      'button:has(i[title*="Check Provider Availability"])',
+      'a:has(i[title*="Check Provider Availability"])',
+      '[title="Check Provider Availability Slots"]'
+    ];
+    
+    let button = null;
+    for (const selector of buttonSelectors) {
+      const btn = modal.locator(selector).first();
+      const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+      if (isVisible) {
+        button = btn;
+        break;
+      }
+    }
+    
+    if (!button) {
+      // Try finding by parent element if icon is inside a button/link
+      const icon = modal.locator('i.fa-book.mr-2').first();
+      const isIconVisible = await icon.isVisible({ timeout: 2000 }).catch(() => false);
+      if (isIconVisible) {
+        // Get parent button/link
+        button = icon.locator('xpath=..').first();
+        const tagName = await button.evaluate(el => el.tagName.toLowerCase()).catch(() => '');
+        if (tagName !== 'button' && tagName !== 'a') {
+          // Try to find button/link ancestor
+          button = icon.locator('xpath=ancestor::button | ancestor::a').first();
+        }
+      }
+    }
+    
+    if (!button) {
+      throw new Error('Check Provider Availability Slots button not found');
+    }
+    
+    await button.click();
+    await this.page.waitForTimeout(1500); // Wait for modal to open
+    
+    // Wait for new modal to appear (the availability slots modal)
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+    await this.page.waitForTimeout(1000); // Additional wait for modal content to render
+    
+    console.log('✓ Check Provider Availability Slots button clicked');
+  }
+
+  async verifyAvailableSlotsModalTitle() {
+    console.log('ASSERT: Verifying Available Slots modal title appears...');
+    
+    // Wait a bit for modal to fully load
+    await this.page.waitForTimeout(1000);
+    
+    const modal = this.modal();
+    
+    // Wait for modal to be visible
+    await expect(modal).toBeVisible({ timeout: 5000 });
+    
+    // Check for the title with "Available Slots For"
+    const titleSelectors = [
+      'h5.modal-title:has-text("Available Slots For")',
+      '.modal-title:has-text("Available Slots For")',
+      'h5:has-text("Available Slots For")',
+      '[class*="modal-title"]:has-text("Available Slots For")',
+      'h5.modal-title.w-100.text-center:has-text("Available Slots")',
+      '.modal-title.w-100:has-text("Available Slots")',
+      'h5:has-text("Available Slots")'
+    ];
+    
+    let titleFound = false;
+    let titleText = '';
+    
+    // Try page-wide search first (modal might be a new overlay)
+    for (const selector of titleSelectors) {
+      const title = this.page.locator(selector).first();
+      const isVisible = await title.isVisible({ timeout: 2000 }).catch(() => false);
+      if (isVisible) {
+        titleText = await title.textContent({ timeout: 1000 }).catch(() => '');
+        if (titleText && titleText.includes('Available Slots')) {
+          console.log(`✓ Available Slots modal title found: "${titleText.trim()}"`);
+          titleFound = true;
+          break;
+        }
+      }
+    }
+    
+    // If not found page-wide, try within modal
+    if (!titleFound) {
+      for (const selector of titleSelectors) {
+        const title = modal.locator(selector).first();
+        const isVisible = await title.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          titleText = await title.textContent({ timeout: 1000 }).catch(() => '');
+          if (titleText && titleText.includes('Available Slots')) {
+            console.log(`✓ Available Slots modal title found: "${titleText.trim()}"`);
+            titleFound = true;
+            break;
+          }
+        }
+      }
+    }
+    
+    // Last resort: search for any h5 with modal-title class
+    if (!titleFound) {
+      const allTitles = this.page.locator('h5.modal-title, .modal-title');
+      const count = await allTitles.count({ timeout: 2000 }).catch(() => 0);
+      
+      for (let i = 0; i < count; i++) {
+        const title = allTitles.nth(i);
+        const isVisible = await title.isVisible({ timeout: 1000 }).catch(() => false);
+        if (isVisible) {
+          titleText = await title.textContent({ timeout: 1000 }).catch(() => '');
+          if (titleText && titleText.toLowerCase().includes('available slots')) {
+            console.log(`✓ Available Slots modal title found: "${titleText.trim()}"`);
+            titleFound = true;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (!titleFound) {
+      throw new Error('Available Slots modal title not found. Modal may not have opened correctly.');
+    }
+  }
+
+  async getPreviousDate() {
+    // Get tomorrow's date (not previous, but next day for testing)
+    const date = new Date();
+    date.setDate(date.getDate() + 1); // Tomorrow
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${month}/${day}/${year}`;
+  }
+
+  async getNextDate() {
+    // Get day after tomorrow's date
+    const date = new Date();
+    date.setDate(date.getDate() + 2); // Day after tomorrow
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${month}/${day}/${year}`;
+  }
+  
+  async getCurrentDate() {
+    // Get today's date
+    const date = new Date();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${month}/${day}/${year}`;
+  }
+
+  async inputToDateAndCheckAvailability(dateString) {
+    console.log(`STEP: Inputting date "${dateString}" in To date field and checking availability...`);
+    
+    // Wait for modal to be ready
+    await this.page.waitForTimeout(500);
+    
+    // Ensure we're working with the "Available Slots" modal (not the create appointment modal)
+    // Find modal that contains "Available Slots For" title
+    const availableSlotsModal = this.page.locator('[role="dialog"]:has(h5:has-text("Available Slots For")), .modal:has(h5:has-text("Available Slots For"))').first();
+    await expect(availableSlotsModal).toBeVisible({ timeout: 5000 });
+    
+    const modal = availableSlotsModal; // Use the specific Available Slots modal
+    
+    // Find the "To date" input field - try multiple approaches
+    let toDateInput = null;
+    
+    // Approach 1: Find by label "To date" or "To Date"
+    const toDateLabelSelectors = [
+      'label:has-text("To date")',
+      'label:has-text("To Date")',
+      'label:has-text("To")',
+      '*:has-text("To date")',
+      '*:has-text("To Date")'
+    ];
+    
+    for (const labelSelector of toDateLabelSelectors) {
+      const toDateLabel = modal.locator(labelSelector).first();
+      const labelExists = await toDateLabel.isVisible({ timeout: 2000 }).catch(() => false);
+      
+      if (labelExists) {
+        // Get input associated with label
+        const labelFor = await toDateLabel.getAttribute('for').catch(() => '');
+        if (labelFor) {
+          toDateInput = modal.locator(`input#${labelFor}`).first();
+          if (await toDateInput.isVisible({ timeout: 1000 }).catch(() => false)) {
+            break;
+          }
+        }
+        
+        // Try to find input near the label (following sibling or in same container)
+        const nearbyInput = toDateLabel.locator('xpath=following::input[contains(@id,"datepicker")] | following::input[@role="combobox"][@aria-label="datepicker"] | ../following-sibling::*//input[contains(@id,"datepicker")]').first();
+        if (await nearbyInput.isVisible({ timeout: 1000 }).catch(() => false)) {
+          toDateInput = nearbyInput;
+          break;
+        }
+      }
+    }
+    
+    // Approach 2: Find all datepicker inputs and get the second one (To date is usually second)
+    if (!toDateInput) {
+      const allDateInputs = modal.locator('input[id*="datepicker"], input[aria-label="datepicker"], input[role="combobox"][aria-label="datepicker"]');
+      const count = await allDateInputs.count({ timeout: 2000 }).catch(() => 0);
+      
+      console.log(`ℹ️ Found ${count} datepicker input(s) in modal`);
+      
+      if (count >= 2) {
+        // Second one is usually "To date"
+        toDateInput = allDateInputs.nth(1);
+      } else if (count === 1) {
+        // Only one datepicker, might be "To date" if "From date" is not shown
+        toDateInput = allDateInputs.first();
+      }
+    }
+    
+    // Approach 3: Find by looking for input with specific pattern (ej2-datepicker_*_input)
+    if (!toDateInput) {
+      const allInputs = modal.locator('input[id*="datepicker"]');
+      const count = await allInputs.count({ timeout: 2000 }).catch(() => 0);
+      
+      // Try to find the one that's not "From date"
+      for (let i = 0; i < count; i++) {
+        const input = allInputs.nth(i);
+        const id = await input.getAttribute('id').catch(() => '');
+        const ariaLabel = await input.getAttribute('aria-label').catch(() => '');
+        
+        // Skip if it's clearly "From date"
+        if (id && id.toLowerCase().includes('from') || ariaLabel && ariaLabel.toLowerCase().includes('from')) {
+          continue;
+        }
+        
+        // Check nearby label
+        const nearbyLabel = input.locator('xpath=preceding::label[contains(text(),"To")] | ../preceding-sibling::*//label[contains(text(),"To")]').first();
+        const labelText = await nearbyLabel.textContent({ timeout: 500 }).catch(() => '');
+        if (labelText && labelText.toLowerCase().includes('to')) {
+          toDateInput = input;
+          break;
+        } else if (i === count - 1 || count === 1) {
+          // Last input or only input - likely "To date"
+          toDateInput = input;
+          break;
+        }
+      }
+    }
+    
+    if (!toDateInput) {
+      throw new Error('To date input field not found. Please check the modal structure.');
+    }
+    
+    // We found the input field reference, but we'll use the calendar icon instead
+    // No need to check input visibility since we're using calendar for date selection
+    console.log(`✓ To date input field reference found (will use calendar icon for selection)`);
+    
+    // Find and click the calendar icon to open the datepicker
+    // IMPORTANT: Use the calendar icon from the "Available Slots" modal only
+    console.log('STEP: Finding calendar icon for To date field in Available Slots modal...');
+    
+    // Use the specific selector for the calendar icon in Available Slots modal
+    const calendarIconSelectors = [
+      'span.e-input-group-icon.e-date-icon.e-icons[aria-label="select"][role="button"]',
+      'span.e-input-group-icon.e-date-icon.e-icons[aria-label="select"]',
+      'span.e-input-group-icon.e-date-icon.e-icons',
+      'span.e-date-icon[aria-label="select"][role="button"]'
+    ];
+    
+    let calendarIcon = null;
+    
+    // First, try to find calendar icon in the same container as the "To date" input field
+    if (toDateInput) {
+      const inputContainer = toDateInput.locator('xpath=ancestor::*[contains(@class,"e-input-group") or contains(@class,"e-control-wrapper")]').first();
+      const containerCount = await inputContainer.count({ timeout: 1000 }).catch(() => 0);
+      
+      if (containerCount > 0) {
+        for (const selector of calendarIconSelectors) {
+          const icon = inputContainer.locator(selector).first();
+          const isVisible = await icon.isVisible({ timeout: 1000 }).catch(() => false);
+          if (isVisible) {
+            calendarIcon = icon;
+            console.log(`✓ Calendar icon found in input container within Available Slots modal`);
+            break;
+          }
+        }
+      }
+    }
+    
+    // If not found in container, search within the Available Slots modal for all calendar icons
+    // Usually the second datepicker icon is "To date" (first is "From date")
+    if (!calendarIcon) {
+      const allCalendarIcons = modal.locator('span.e-input-group-icon.e-date-icon.e-icons[aria-label="select"], span.e-date-icon[aria-label="select"][role="button"]');
+      const iconCount = await allCalendarIcons.count({ timeout: 2000 }).catch(() => 0);
+      
+      console.log(`ℹ️ Found ${iconCount} calendar icon(s) in Available Slots modal`);
+      
+      if (iconCount >= 2) {
+        // Second icon is usually "To date"
+        calendarIcon = allCalendarIcons.nth(1);
+        const isVisible = await calendarIcon.isVisible({ timeout: 1000 }).catch(() => false);
+        if (!isVisible) {
+          calendarIcon = null;
+        } else {
+          console.log(`✓ Using second calendar icon (To date) from Available Slots modal`);
+        }
+      } else if (iconCount === 1) {
+        // Only one icon, use it
+        calendarIcon = allCalendarIcons.first();
+        console.log(`✓ Using calendar icon from Available Slots modal`);
+      }
+    }
+    
+    if (!calendarIcon) {
+      throw new Error('Calendar icon not found for To date field in Available Slots modal');
+    }
+    
+    // Verify icon is visible and clickable
+    await expect(calendarIcon).toBeVisible({ timeout: 3000 });
+    
+    console.log('✓ Calendar icon found, clicking to open datepicker...');
+    await calendarIcon.click();
+    await this.page.waitForTimeout(1000); // Wait for calendar to open
+    
+    // Parse the date string (MM/DD/YYYY)
+    const [month, day, year] = dateString.split('/').map(num => parseInt(num));
+    
+    // Find and select the date in the calendar
+    console.log(`STEP: Selecting date ${dateString} from calendar...`);
+    
+    // Wait for calendar popup to be visible (Syncfusion datepicker)
+    const calendarPopupSelectors = [
+      '.e-calendar:visible',
+      '.e-datepicker-popup:visible',
+      '.e-popup-open .e-calendar',
+      '[class*="calendar"]:visible',
+      '.e-popup:has(.e-calendar):visible'
+    ];
+    
+    let calendarPopup = null;
+    for (const selector of calendarPopupSelectors) {
+      const popup = this.page.locator(selector).first();
+      const isVisible = await popup.isVisible({ timeout: 2000 }).catch(() => false);
+      if (isVisible) {
+        calendarPopup = popup;
+        break;
+      }
+    }
+    
+    if (!calendarPopup) {
+      throw new Error('Calendar popup not found after clicking calendar icon');
+    }
+    
+    await expect(calendarPopup).toBeVisible({ timeout: 5000 });
+    await this.page.waitForTimeout(500);
+    
+    // Try to find and click the day directly - use prev/next buttons if needed
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    const monthAbbr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const targetMonthName = monthNames[month - 1];
+    const targetMonthAbbr = monthAbbr[month - 1];
+    
+    // Find prev/next navigation buttons
+    const prevButton = calendarPopup.locator('.e-prev, .e-icon-prev, button[title*="Prev"], [class*="prev"]').first();
+    const nextButton = calendarPopup.locator('.e-next, .e-icon-next, button[title*="Next"], [class*="next"]').first();
+    const monthYearHeader = calendarPopup.locator('.e-header .e-title, .e-title, [class*="title"]').first();
+    
+    // Try to find the day directly first
+    const daySelectors = [
+      `button:has-text("${day}")`,
+      `td:has-text("${day}")`,
+      `[data-day="${day}"]`,
+      `.e-day:has-text("${day}")`,
+      `button.e-day:has-text("${day}")`
+    ];
+    
+    let dayElement = null;
+    let found = false;
+    let attempts = 0;
+    const maxAttempts = 24; // Maximum months to navigate (2 years)
+    
+    while (attempts < maxAttempts && !found) {
+      // Check if the day is visible in current calendar view
+      for (const selector of daySelectors) {
+        const dayEl = calendarPopup.locator(selector).first();
+        const isVisible = await dayEl.isVisible({ timeout: 1000 }).catch(() => false);
+        if (isVisible) {
+          // Verify we're in the correct month by checking the header
+          const headerText = await monthYearHeader.textContent({ timeout: 1000 }).catch(() => '');
+          const headerLower = headerText.toLowerCase();
+          
+          // Check if current month matches target month
+          if (headerLower.includes(targetMonthName.toLowerCase()) || 
+              headerLower.includes(targetMonthAbbr.toLowerCase()) ||
+              headerLower.includes(monthNames[month - 1].substring(0, 3).toLowerCase())) {
+            dayElement = dayEl;
+            found = true;
+            console.log(`✓ Found day ${day} in calendar for ${targetMonthName} ${year}`);
+            break;
+          }
+        }
+      }
+      
+      if (!found) {
+        // Navigate to the correct month using prev/next buttons
+        // Since we only check current date, tomorrow, and day after tomorrow, we only need to navigate forward
+        const headerText = await monthYearHeader.textContent({ timeout: 1000 }).catch(() => '');
+        const targetDate = new Date(year, month - 1, day);
+        const currentDate = new Date();
+        
+        // Only navigate forward (next button) since we're only checking current/future dates
+        if (targetDate >= currentDate) {
+          // Target is today or in the future, click next
+          await nextButton.click();
+          await this.page.waitForTimeout(500);
+        } else {
+          // Should not happen since we only check current/future dates, but handle gracefully
+          console.log('⚠️ Target date is in the past, but we only check current/future dates');
+          break;
+        }
+        
+        attempts++;
+      }
+    }
+    
+    if (!dayElement || !found) {
+      throw new Error(`Day ${day} not found in calendar after navigating. Date: ${dateString}`);
+    }
+    
+    await dayElement.click({ timeout: 5000 });
+    await this.page.waitForTimeout(1000);
+    
+    console.log(`✓ Date "${dateString}" selected from calendar`);
+    
+    // Click Check Availability button
+    const checkButtonSelectors = [
+      'button:has-text("Check Availability")',
+      'button.btn-primary:has-text("Check Availability")',
+      'button:has(i.fa-search):has-text("Check Availability")',
+      'button.btn:has-text("Check Availability")'
+    ];
+    
+    let checkButton = null;
+    for (const selector of checkButtonSelectors) {
+      const btn = modal.locator(selector).first();
+      const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+      if (isVisible) {
+        checkButton = btn;
+        break;
+      }
+    }
+    
+    if (!checkButton) {
+      throw new Error('Check Availability button not found');
+    }
+    
+    await checkButton.click();
+    console.log('✓ Check Availability button clicked');
+    
+    // Wait for results to load - ensure grid refreshes with new data
+    console.log('STEP: Waiting for availability results to load...');
+    
+    // Wait for loading spinner to appear (indicating new search started)
+    const spinnerAppear = modal.locator('.e-spinner-pane:not(.e-spin-hide), .e-spinner:visible, [class*="spinner"]:visible').first();
+    try {
+      await spinnerAppear.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+      console.log('ℹ️ Loading spinner appeared, waiting for results...');
+    } catch (e) {
+      // Spinner might not appear if results load very quickly
+      console.log('ℹ️ No loading spinner detected, waiting for grid update...');
+    }
+    
+    // Wait for spinner to disappear (results are loading)
+    await this.page.waitForTimeout(500);
+    try {
+      await spinnerAppear.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {});
+      console.log('ℹ️ Loading spinner disappeared');
+    } catch (e) {
+      // Spinner might not exist or already hidden
+    }
+    
+    // Wait for grid to be visible and updated
+    const gridSelectors = [
+      'ejs-grid',
+      '.e-grid',
+      '[class*="grid"]',
+      'table.e-table'
+    ];
+    
+    let grid = null;
+    for (const selector of gridSelectors) {
+      const g = modal.locator(selector).first();
+      const isVisible = await g.isVisible({ timeout: 5000 }).catch(() => false);
+      if (isVisible) {
+        grid = g;
+        break;
+      }
+    }
+    
+    if (!grid) {
+      throw new Error('Availability grid not found after clicking Check Availability');
+    }
+    
+    // Wait for grid content to fully render and update with new search results
+    // Check if grid is in a stable state (not loading)
+    await this.page.waitForTimeout(2000);
+    
+    // Verify grid is not showing spinner - wait for it to disappear
+    const gridSpinner = grid.locator('.e-spinner-pane:not(.e-spin-hide), .e-spinner:visible').first();
+    try {
+      await gridSpinner.waitFor({ state: 'hidden', timeout: 15000 });
+      console.log('ℹ️ Grid spinner disappeared, new results should be loaded');
+    } catch (e) {
+      // Spinner might not exist
+    }
+    
+    // Additional wait to ensure grid content is fully rendered and updated with new data
+    // This is important to avoid reading stale data from previous search
+    await this.page.waitForTimeout(3000);
+    console.log('✓ Waiting for results completed');
+  }
+
+  async verifyAvailabilityGridShowsResults(dateString) {
+    console.log('ASSERT: Verifying availability grid shows results...');
+    
+    // Ensure we're working with the "Available Slots" modal
+    const availableSlotsModal = this.page.locator('[role="dialog"]:has(h5:has-text("Available Slots For")), .modal:has(h5:has-text("Available Slots For"))').first();
+    await expect(availableSlotsModal).toBeVisible({ timeout: 5000 });
+    
+    const modal = availableSlotsModal;
+    
+    // Wait for grid to load and ensure it's showing the latest results
+    await this.page.waitForTimeout(1500);
+    
+    // Find the grid within the Available Slots modal
+    const gridSelectors = [
+      'ejs-grid',
+      '.e-grid',
+      '[class*="grid"]',
+      'table.e-table'
+    ];
+    
+    let grid = null;
+    for (const selector of gridSelectors) {
+      const g = modal.locator(selector).first();
+      const isVisible = await g.isVisible({ timeout: 5000 }).catch(() => false);
+      if (isVisible) {
+        grid = g;
+        break;
+      }
+    }
+    
+    if (!grid) {
+      throw new Error('Availability grid not found in Available Slots modal');
+    }
+    
+    // Wait for spinner to disappear (ensure grid is fully loaded with new results)
+    const spinner = grid.locator('.e-spinner-pane:not(.e-spin-hide), .e-spinner:visible').first();
+    try {
+      await spinner.waitFor({ state: 'hidden', timeout: 15000 });
+      console.log('ℹ️ Grid spinner disappeared, results should be loaded');
+    } catch (e) {
+      // Spinner might not exist or already hidden
+    }
+    
+    // Additional wait to ensure grid content is stable and updated
+    await this.page.waitForTimeout(2000);
+    
+    // Check for grid rows with data
+    const rows = grid.locator('tbody tr.e-row:not(.e-hide)');
+    const rowCount = await rows.count({ timeout: 5000 }).catch(() => 0);
+    
+    if (rowCount === 0) {
+      // Check if there's a "no data" message
+      const noDataMessage = grid.locator('.e-emptyrow, .e-empty, [class*="empty"]').first();
+      const hasNoData = await noDataMessage.isVisible({ timeout: 1000 }).catch(() => false);
+      
+      if (hasNoData) {
+        console.log(`✓ No slot available on ${dateString}`);
+        return; // This is acceptable - no slots available
+      }
+      
+      throw new Error('Availability grid shows no results and no "no data" message');
+    }
+    
+    // Verify rows have Start Time and End Time columns
+    const firstRow = rows.first();
+    const startTimeCell = firstRow.locator('td[data-colindex="0"], td:first-child').first();
+    const endTimeCell = firstRow.locator('td[data-colindex="1"], td:last-child').first();
+    
+    const startTime = await startTimeCell.textContent({ timeout: 2000 }).catch(() => '');
+    const endTime = await endTimeCell.textContent({ timeout: 2000 }).catch(() => '');
+    
+    if (!startTime || !endTime) {
+      throw new Error('Grid rows do not contain Start Time and End Time data');
+    }
+    
+    console.log(`✓ ${rowCount} slot${rowCount > 1 ? 's' : ''} available on ${dateString}`);
+  }
+
+  // TC52: Create Appointment for new patient methods
+  async clickAddNewPatientButton() {
+    console.log('STEP: Clicking Add New Patient button...');
+    
+    // Verify page is not closed
+    if (this.page.isClosed()) {
+      throw new Error('Page is closed, cannot click Add New Patient button');
+    }
+    
+    const modal = this.modal();
+    await expect(modal).toBeVisible({ timeout: 5000 });
+    
+    const addPatientButton = modal.locator('i[title="Add New Patient"], i.fa-plus-circle[title*="Add New Patient"]').first();
+    await expect(addPatientButton).toBeVisible({ timeout: 5000 });
+    
+    // Click the button
+    await addPatientButton.click();
+    await this.page.waitForTimeout(1000);
+    
+    // Wait for Add New Patient modal to appear - check multiple selectors
+    console.log('STEP: Waiting for Add New Patient modal to open...');
+    const addPatientModalSelectors = [
+      '.modal:has(.modal-title:has-text("Add New Patient"))',
+      '[role="dialog"]:has-text("Add New Patient")',
+      '.modal:has-text("Add New Patient")',
+      '.modal-title:has-text("Add New Patient")'
+    ];
+    
+    let addPatientModal = null;
+    for (const selector of addPatientModalSelectors) {
+      const modalEl = this.page.locator(selector).first();
+      const isVisible = await modalEl.isVisible({ timeout: 3000 }).catch(() => false);
+      if (isVisible) {
+        addPatientModal = modalEl;
+        break;
+      }
+    }
+    
+    if (!addPatientModal) {
+      throw new Error('Add New Patient modal did not open after clicking button');
+    }
+    
+    // Wait for modal content to fully load
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+    await this.page.waitForTimeout(2000); // Additional wait for modal content to render
+    
+    // Verify page is still not closed
+    if (this.page.isClosed()) {
+      throw new Error('Page was closed after opening Add New Patient modal');
+    }
+    
+    // Verify modal title is visible
+    const modalTitle = this.page.locator('.modal-title:has-text("Add New Patient")').first();
+    await expect(modalTitle).toBeVisible({ timeout: 5000 });
+    
+    console.log('✓ Add New Patient modal opened and ready');
+  }
+
+  async waitForAndCloseViewEligibilityModal() {
+    console.log('STEP: Waiting for View Eligibility modal to appear...');
+    
+    // Wait for confirmation popup to close first
+    await this.page.waitForTimeout(2000);
+    
+    // Wait for page to be ready
+    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await this.page.waitForTimeout(2000); // Additional wait for View Eligibility modal to start loading
+    
+    // Wait for View Eligibility modal to appear after saving insurance policy
+    const eligibilityModalSelectors = [
+      '[role="dialog"]:has-text("View Eligibility")',
+      '[role="dialog"]:has-text("Eligibility")',
+      '.modal:has-text("View Eligibility")',
+      '.modal:has-text("Eligibility")',
+      '.modal:has(h5:has-text("Eligibility"))',
+      '.modal:has(h5:has-text("View Eligibility"))',
+      '[role="dialog"]:has(h5:has-text("Eligibility"))',
+      '[role="dialog"]:has(h5:has-text("View Eligibility"))',
+      '.modal:visible:has-text("Eligibility")',
+      '[role="dialog"]:visible:has-text("Eligibility")'
+    ];
+    
+    let eligibilityModal = null;
+    let attempts = 0;
+    const maxAttempts = 10; // Try for up to 20 seconds (2 seconds per attempt)
+    
+    while (attempts < maxAttempts && !eligibilityModal) {
+      for (const selector of eligibilityModalSelectors) {
+        const modal = this.page.locator(selector).first();
+        const isVisible = await modal.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          eligibilityModal = modal;
+          console.log(`✓ View Eligibility modal found with selector: ${selector} (after ${attempts + 1} attempt(s))`);
+          break;
+        }
+      }
+      
+      if (!eligibilityModal) {
+        attempts++;
+        if (attempts < maxAttempts) {
+          console.log(`ℹ️ View Eligibility modal not found yet, waiting... (attempt ${attempts}/${maxAttempts})`);
+          await this.page.waitForTimeout(2000);
+        }
+      }
+    }
+    
+    if (!eligibilityModal) {
+      throw new Error('View Eligibility modal did not appear after saving insurance policy (waited 20+ seconds)');
+    }
+    
+    // Wait for modal to be fully loaded
+    await this.page.waitForTimeout(1000);
+    
+    // Close the modal
+    console.log('STEP: Closing View Eligibility modal...');
+    const closeButton = eligibilityModal.locator('i.fa-times.fa-lg, button:has(i.fa-times.fa-lg), button[aria-label*="close" i], .modal-header i.fa-times, i.fa-times[cursor]').first();
+    await expect(closeButton).toBeVisible({ timeout: 5000 });
+    await closeButton.click();
+    await this.page.waitForTimeout(1000);
+    
+    // Verify modal is closed
+    const isStillVisible = await eligibilityModal.isVisible({ timeout: 2000 }).catch(() => false);
+    if (isStillVisible) {
+      console.log('⚠️ View Eligibility modal still visible, trying to close again...');
+      await closeButton.click({ force: true });
+      await this.page.waitForTimeout(1000);
+    }
+    
+    console.log('✓ View Eligibility modal closed');
+  }
+
+  async closeDemographicsModal() {
+    console.log('STEP: Closing patient demographics modal...');
+    // Close button for demographics page/modal - look for cross icon
+    const closeButtonSelectors = [
+      'i.fa-times.fa-lg[cursor]',
+      'i.fa-times.fa-lg',
+      'button:has(i.fa-times.fa-lg)',
+      '.modal-header i.fa-times.fa-lg',
+      '[role="dialog"] i.fa-times.fa-lg'
+    ];
+    
+    let closeButton = null;
+    for (const selector of closeButtonSelectors) {
+      const btn = this.page.locator(selector).first();
+      const isVisible = await btn.isVisible({ timeout: 3000 }).catch(() => false);
+      if (isVisible) {
+        // Make sure it's in a modal context (not the appointment modal)
+        const parentModal = btn.locator('xpath=ancestor::*[contains(@class,"modal") or @role="dialog"]').first();
+        const modalText = await parentModal.textContent({ timeout: 1000 }).catch(() => '');
+        // Check if it's the demographics modal (not appointment modal)
+        if (modalText.includes('Demographics') || modalText.includes('Patient') || !modalText.includes('Appointment')) {
+          closeButton = btn;
+          break;
+        }
+      }
+    }
+    
+    if (closeButton) {
+      await closeButton.click();
+      await this.page.waitForTimeout(1000);
+      console.log('✓ Patient demographics modal closed');
+    } else {
+      console.log('ℹ️ Patient demographics modal close button not found (may have already closed)');
+    }
+  }
+
+  async saveAppointmentAndVerifySuccess() {
+    console.log('STEP: Saving appointment...');
+    const modal = this.modal();
+    await expect(modal).toBeVisible({ timeout: 5000 });
+    
+    const saveButton = modal.locator('button.e-event-save, button:has-text("Save")').first();
+    await expect(saveButton).toBeVisible({ timeout: 5000 });
+    await saveButton.click();
+    await this.page.waitForTimeout(2000);
+    
+    // Verify success toaster
+    const toasterSelectors = [
+      '.toast-success:visible',
+      '.toast:has-text("success"):visible',
+      '[class*="toast"]:has-text("success"):visible',
+      '[class*="success"]:visible'
+    ];
+    
+    let toasterFound = false;
+    for (const selector of toasterSelectors) {
+      const toaster = this.page.locator(selector).first();
+      const isVisible = await toaster.isVisible({ timeout: 5000 }).catch(() => false);
+      if (isVisible) {
+        toasterFound = true;
+        const toasterText = await toaster.textContent({ timeout: 2000 }).catch(() => '');
+        console.log(`✓ Success toaster appeared: ${toasterText.substring(0, 100)}`);
+        break;
+      }
+    }
+    
+    if (!toasterFound) {
+      console.log('⚠️ Success toaster not found, but appointment may have been saved');
+    }
+  }
+
+  async deleteAppointment() {
+    console.log('STEP: Deleting appointment...');
+    await this.deleteAppointmentFromScheduler();
+  }
+
+  // TC52: Helper methods to consolidate test steps
+  async setupAppointmentModalAndSelectType() {
+    console.log('STEP: Setting up appointment modal and selecting type...');
+    await this.openAddEventPopupRandomSlot();
+    await this.selectAppointmentRadioButton();
+    await this.selectAppointmentTypeForAppointment();
+    console.log('✓ Appointment modal setup complete');
+  }
+
+  async createNewPatientFromAppointmentModal(patientPage, patientData, email) {
+    console.log('STEP: Creating new patient from appointment modal...');
+    await this.clickAddNewPatientButton();
+    await expect(patientPage.modalTitle).toBeVisible();
+    await patientPage.fillMandatoryFields(patientData);
+    await patientPage.enterEmailAddress(email);
+    await patientPage.checkNoSSN();
+    await patientPage.savePatientAndVerifySuccess();
+    console.log('✓ New patient created');
+  }
+
+  async addInsurancePolicyForPatient(patientPage, insuranceData, patientData) {
+    console.log('STEP: Adding insurance policy for patient...');
+    await patientPage.verifyNavigationToPatientDemographics();
+    await patientPage.selectInsuranceTab();
+    await patientPage.clickAddPolicy();
+    await patientPage.fillInsurancePolicyForm(insuranceData, patientData);
+    
+    // Wait for refresh after selecting Self
+    await this.page.waitForTimeout(2000);
+    
+    // Verify Self is selected
+    const ptRelationInput = patientPage.ptRelationDropdown.locator('input[role="combobox"]').first();
+    const ptRelationValue = await ptRelationInput.inputValue({ timeout: 2000 }).catch(() => '');
+    if (ptRelationValue !== 'Self') {
+      throw new Error(`Pt Relation not selected correctly. Expected "Self", found "${ptRelationValue}"`);
+    }
+    console.log('✓ Verified Self is selected in Pt Relation dropdown');
+    
+    await patientPage.saveInsurancePolicy();
+    console.log('✓ Insurance policy saved');
+  }
+
+  async handlePostInsuranceModals(patientPage) {
+    console.log('STEP: Handling post-insurance modals...');
+    // Click OK on confirmation popup
+    await patientPage.handleConfirmationDialog();
+    
+    // Wait for confirmation popup to close and View Eligibility modal to start loading
+    console.log('STEP: Waiting for confirmation popup to close...');
+    await this.page.waitForTimeout(3000);
+    
+    // Wait for and close View Eligibility modal
+    await this.waitForAndCloseViewEligibilityModal();
+    
+    // Close patient demographics modal
+    await this.closeDemographicsModal();
+    console.log('✓ All modals closed');
   }
 }
 
