@@ -144,6 +144,43 @@ class PatientEligibilityPage {
   /**
    * Navigate to scheduling page and open appointment modal
    */
+  // Helper: Calculate next business day (skip Saturday and Sunday, go to Monday)
+  getNextBusinessDay() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dayOfWeek = tomorrow.getDay(); // 0 = Sunday, 6 = Saturday
+    
+    // If tomorrow is Saturday, skip to Monday (add 2 more days)
+    if (dayOfWeek === 6) {
+      tomorrow.setDate(tomorrow.getDate() + 2);
+      console.log('ℹ️ Next day is Saturday, skipping to Monday');
+    }
+    // If tomorrow is Sunday, skip to Monday (add 1 more day)
+    else if (dayOfWeek === 0) {
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      console.log('ℹ️ Next day is Sunday, skipping to Monday');
+    }
+    
+    return tomorrow;
+  }
+
+  // Helper: Get number of days to navigate (1 for normal, 2 if tomorrow is Sunday, 3 if tomorrow is Saturday)
+  getDaysToNavigate() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dayOfWeek = tomorrow.getDay();
+    
+    // If tomorrow is Saturday, need to navigate 3 days (to Monday)
+    if (dayOfWeek === 6) {
+      return 3;
+    }
+    // If tomorrow is Sunday, need to navigate 2 days (to Monday)
+    if (dayOfWeek === 0) {
+      return 2;
+    }
+    return 1;
+  }
+
   async navigateToSchedulingAndOpenAppointment(loginPage) {
     console.log('STEP: Navigating to Scheduling page...');
     await this.page.goto('/scheduling');
@@ -160,25 +197,75 @@ class PatientEligibilityPage {
     await this.page.waitForSelector('.e-schedule, .e-scheduler', { timeout: 15000, state: 'visible' });
     await this.page.waitForTimeout(1000);
     
-    // Navigate to next business day
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const dayOfWeek = tomorrow.getDay();
+    // Navigate to next business day (skip Saturday and Sunday)
+    console.log('STEP: Navigating to next business day...');
+    const daysToNavigate = this.getDaysToNavigate();
     
-    if (dayOfWeek === 6) {
-      tomorrow.setDate(tomorrow.getDate() + 2);
+    if (daysToNavigate === 3) {
+      console.log('ℹ️ Next day is Saturday, navigating to Monday (3 days ahead)');
+    } else if (daysToNavigate === 2) {
+      console.log('ℹ️ Next day is Sunday, navigating to Monday (2 days ahead)');
     }
     
     const nextButton = this.page.locator('button[title="Next"], .e-next button').first();
     await expect(nextButton).toBeVisible({ timeout: 10000 });
-    await nextButton.click();
+    await expect(nextButton).toBeEnabled();
+    
+    // Click next button the required number of times
+    for (let i = 0; i < daysToNavigate; i++) {
+      await nextButton.click();
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+      // Wait for scheduler cells to render
+      await this.page.waitForSelector('td.e-work-cells', { timeout: 10000, state: 'visible' }).catch(() => {});
+      await this.page.waitForTimeout(1000); // Allow scheduler to fully update
+      
+      if (i < daysToNavigate - 1) {
+        console.log(`ℹ️ Navigated ${i + 1} day(s), continuing...`);
+      }
+    }
+    
+    console.log(`✓ Navigated to next business day (${daysToNavigate} day(s) ahead)`);
+    
+    // Wait for scheduler to be fully loaded before opening appointment modal
+    console.log('STEP: Waiting for scheduler to be fully loaded...');
+    
+    // Wait for network to be idle
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
     await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-    await this.page.waitForSelector('td.e-work-cells', { timeout: 10000, state: 'visible' }).catch(() => {});
-    await this.page.waitForTimeout(1000);
+    
+    // Wait for loader to disappear if present
+    const loader = this.page.locator('.loader-wrapper, .loader, [class*="loader"]').first();
+    const loaderVisible = await loader.isVisible({ timeout: 2000 }).catch(() => false);
+    if (loaderVisible) {
+      console.log('ℹ️ Loader detected, waiting for it to disappear...');
+      await loader.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+      await this.page.waitForTimeout(500);
+    }
+    
+    // Wait for scheduler cells to be fully rendered
+    await this.page.waitForSelector('td.e-work-cells', { timeout: 15000, state: 'visible' });
+    
+    // Additional wait for scheduler to stabilize after navigation
+    await this.page.waitForTimeout(2000);
+    
+    // Verify scheduler is ready by checking multiple cells are visible
+    const cells = this.page.locator('td.e-work-cells');
+    const cellCount = await cells.count({ timeout: 5000 }).catch(() => 0);
+    if (cellCount === 0) {
+      throw new Error('Scheduler cells not found after navigation');
+    }
+    console.log(`✓ Scheduler loaded with ${cellCount} cells visible`);
+    
+    // Additional wait to ensure scheduler is fully interactive
+    await this.page.waitForTimeout(1500);
     
     // Use SchedulingPage's random slot method to open appointment modal
     console.log('STEP: Opening appointment modal using random available slot...');
     const schedulingPage = new SchedulingPage(this.page);
+    
+    // Wait a bit more before attempting to open modal to ensure scheduler is ready
+    await this.page.waitForTimeout(1000);
+    
     await schedulingPage.openAddEventPopupRandomSlot();
     console.log('✓ Appointment modal opened');
   }
@@ -2835,14 +2922,10 @@ class PatientEligibilityPage {
       
       // Wait for delete confirmation modal to appear
       await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-      await this.page.waitForTimeout(1500);
+      await this.page.waitForTimeout(2000);
       console.log('✓ Delete button clicked');
       
-      // Wait for delete confirmation modal
-      const deleteConfirmModal = this.page.locator('.modal:has-text("delete"), [role="dialog"]:has-text("delete"), .e-popup-open:has-text("delete")').first();
-      await expect(deleteConfirmModal).toBeVisible({ timeout: 10000 });
-      await this.page.waitForTimeout(1000); // Wait for modal content to load
-      
+      // confirmDeleteEvent already handles finding and interacting with the delete confirmation modal
       await this.confirmDeleteEvent();
       
       // Wait for deletion to complete

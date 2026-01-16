@@ -836,7 +836,7 @@ class QuickAccessMenuPage {
    */
   getReportsSubmenuItems() {
     return [
-      { name: 'Patient List', urlContains: 'patient-list' },
+      { name: 'Patient List', urlContains: 'view-patient-report' },
       { name: 'Residential Bed Management', urlContains: 'resources' },
       { name: 'ITP Report', urlContains: 'itp-report' },
       { name: 'Encounter Addendums', urlContains: 'encounter-adandoms' },

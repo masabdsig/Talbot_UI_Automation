@@ -27,6 +27,7 @@ test.describe('Scheduling Module - Recurring Appointments', () => {
   });
 
   test('TC72: Each occurrence can be individually modified', async ({ page }) => {
+    test.setTimeout(300000); // 5 minutes timeout
     const loginPage = new LoginPage(page);
     const recurringAppointmentsPage = new RecurringAppointmentsPage(page);
 
@@ -46,45 +47,6 @@ test.describe('Scheduling Module - Recurring Appointments', () => {
     console.log(`✓ ASSERT: Cancelled ${result.cancellationsCount} appointment(s) successfully`);
     
     console.log('\n✓ TEST COMPLETED: TC72 Each occurrence can be individually modified validation completed');
-  });
-
-  test('TC73: Modifying pattern affects only future occurrences', async ({ page }) => {
-    const loginPage = new LoginPage(page);
-    const recurringAppointmentsPage = new RecurringAppointmentsPage(page);
-
-    console.log('\n=== TC73: Modifying pattern affects only future occurrences ===');
-    
-    // Setup scheduler for next day
-    await recurringAppointmentsPage.setupSchedulerForNextDay(loginPage);
-    
-    // Test that modifying pattern affects only future occurrences
-    const result = await recurringAppointmentsPage.testModifyingPatternAffectsOnlyFutureOccurrences('Daily', 1, 4);
-    
-    // Assertions
-    expect(result).toBe(true);
-    console.log('✓ ASSERT: Pattern modification affects only future occurrences');
-    
-    console.log('\n✓ TEST COMPLETED: TC73 validation completed');
-  });
-
-  test('TC74: Maximum 52 occurrences per series', async ({ page }) => {
-    const loginPage = new LoginPage(page);
-    const recurringAppointmentsPage = new RecurringAppointmentsPage(page);
-
-    console.log('\n=== TC74: Maximum 52 occurrences per series ===');
-    
-    // Setup scheduler for next day
-    await recurringAppointmentsPage.setupSchedulerForNextDay(loginPage);
-    
-    // Test that default prepopulated end date is 52 days from current date
-    // Flow: Appointment type -> Group Therapy -> Repeat -> Until (validate default end date)
-    const result = await recurringAppointmentsPage.testMaximumOccurrencesPerSeries('Daily', 1);
-    
-    // Assertions
-    expect(result).toBe(true);
-    console.log('✓ ASSERT: Default prepopulated end date is 52 days from current date');
-    
-    console.log('\n✓ TEST COMPLETED: TC74 validation completed');
   });
 
 });

@@ -125,6 +125,12 @@ test.describe('Quick Access Menu Validation', () => {
 
     await loginPage.navigateToDashboard();
     
+    // Zoom out to 80%
+    await page.evaluate(() => {
+      document.body.style.zoom = '0.7';
+    });
+    await page.waitForTimeout(500); // Wait for zoom to apply
+    
     // Validate Reports submenu items and navigation
     const summary = await quickAccessMenuPage.validateReportsSubmenuNavigation();
     

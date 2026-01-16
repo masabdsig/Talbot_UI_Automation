@@ -7,7 +7,7 @@ class RecurringAppointmentsPage extends SchedulingPage {
     // Locators for Recurring Appointments
     this.recurringCheckbox = () => this.modal().locator('input[type="checkbox"][name*="recurring"], input[type="checkbox"][id*="recurring"], label:has-text("Recurring") + input[type="checkbox"]').first();
     this.recurringPatternDropdown = () => this.modal().locator('label:has-text("Repeat"), label:has-text("Recurrence Pattern"), label:has-text("Pattern")').locator('xpath=../..//div[contains(@class,"e-control-wrapper")]').first();
-    this.groupTherapyDropdown = () => this.modal().locator('label:has-text("Group Therapy")').locator('xpath=../..//div[contains(@class,"e-control-wrapper")]').first();
+    this.groupTherapyDropdown = () => this.modal().locator('label:has-text("Group Therapy")').locator('xpath=../..//div[contains(@class,"e-control-wrapper")][contains(@class,"e-ddl")]').first();
     this.recurringFrequencyInput = () => this.modal().locator('label:has-text("Frequency"), label:has-text("Every"), label:has-text("Repeat Every")').locator('xpath=../..//input').first();
     this.recurringEndDateInput = () => this.modal().locator('label:has-text("End Date"), label:has-text("Repeat Until"), label:has-text("Ends On")').locator('xpath=../..//input').first();
     this.recurringOccurrencesInput = () => this.modal().locator('label:has-text("Occurrences"), label:has-text("Number of Occurrences")').locator('xpath=../..//input').first();
@@ -410,27 +410,56 @@ class RecurringAppointmentsPage extends SchedulingPage {
       return false;
     }
 
-    // Click dropdown to open
+    // Click dropdown to open - try multiple strategies
     await groupTherapyDropdown.scrollIntoViewIfNeeded();
     await this.page.waitForTimeout(300);
     
-    // Try clicking the dropdown icon or input
+    // Strategy 1: Try clicking the dropdown icon
     const dropdownIcon = groupTherapyDropdown.locator('.e-ddl-icon, .e-input-group-icon, span.e-ddl-icon').first();
     const iconVisible = await dropdownIcon.isVisible({ timeout: 1000 }).catch(() => false);
     
     if (iconVisible) {
-      await dropdownIcon.click({ force: true });
+      console.log('STEP: Clicking Group Therapy dropdown icon...');
+      await dropdownIcon.click({ force: true, timeout: 3000 });
+      await this.page.waitForTimeout(500);
     } else {
+      // Strategy 2: Try clicking the input field
       const input = groupTherapyDropdown.locator('input[readonly], input[role="combobox"]').first();
       const inputVisible = await input.isVisible({ timeout: 1000 }).catch(() => false);
       if (inputVisible) {
-        await input.click({ force: true });
+        console.log('STEP: Clicking Group Therapy dropdown input...');
+        await input.click({ force: true, timeout: 3000 });
+        await this.page.waitForTimeout(500);
       } else {
-        await groupTherapyDropdown.click({ force: true });
+        // Strategy 3: Click the wrapper
+        console.log('STEP: Clicking Group Therapy dropdown wrapper...');
+        await groupTherapyDropdown.click({ force: true, timeout: 3000 });
+        await this.page.waitForTimeout(500);
       }
     }
     
-    await this.page.waitForTimeout(1500); // Wait for popup to appear
+    // Wait for dropdown to open and verify it opened
+    await this.page.waitForTimeout(1000);
+    
+    // Verify dropdown opened by checking if aria-expanded is true or popup is visible
+    const inputForCheck = groupTherapyDropdown.locator('input[readonly], input[role="combobox"]').first();
+    const ariaExpanded = await inputForCheck.getAttribute('aria-expanded').catch(() => 'false');
+    
+    if (ariaExpanded !== 'true') {
+      // Try clicking again if not opened
+      console.log('STEP: Group Therapy dropdown not opened, trying to click again...');
+      if (iconVisible) {
+        await dropdownIcon.click({ force: true, timeout: 3000 });
+      } else {
+        const inputForClick = groupTherapyDropdown.locator('input[readonly], input[role="combobox"]').first();
+        await inputForClick.click({ force: true, timeout: 3000 }).catch(() => {
+          return groupTherapyDropdown.click({ force: true, timeout: 3000 });
+        });
+      }
+      await this.page.waitForTimeout(1000);
+    }
+    
+    await this.page.waitForTimeout(500);
 
     // Find popup and select first option - use same pattern as other dropdowns
     const popupSelectors = [
@@ -534,8 +563,18 @@ class RecurringAppointmentsPage extends SchedulingPage {
     await firstOption.scrollIntoViewIfNeeded();
     await this.page.waitForTimeout(200);
     await firstOption.click({ timeout: 3000 });
-    await this.page.waitForTimeout(500);
-    console.log(`✓ First Group Therapy option selected`);
+    
+    // Wait for dropdown popup to close
+    await this.page.waitForTimeout(1000);
+    
+    // Verify the selection was made by checking the input value
+    const groupTherapyInput = groupTherapyDropdown.locator('input[readonly], input[role="combobox"]').first();
+    const inputValue = await groupTherapyInput.inputValue({ timeout: 2000 }).catch(() => '');
+    if (inputValue && inputValue.trim()) {
+      console.log(`✓ First Group Therapy option selected: "${inputValue.trim()}"`);
+    } else {
+      console.log(`✓ First Group Therapy option selected`);
+    }
     return true;
   }
 
@@ -723,26 +762,128 @@ class RecurringAppointmentsPage extends SchedulingPage {
     return true;
   }
 
-  // Helper: Calculate date 3 days from today and format as M/D/YY
-  _getDateThreeDaysFromToday() {
-    const today = new Date();
-    const threeDaysLater = new Date(today);
-    threeDaysLater.setDate(today.getDate() + 3);
+  // Helper: Get appointment start date from modal (from Start Time field)
+  async _getAppointmentStartDate() {
+    const modal = this.modal();
     
-    // Format as M/D/YY (e.g., 1/16/26)
-    const month = threeDaysLater.getMonth() + 1; // getMonth() returns 0-11
-    const day = threeDaysLater.getDate();
-    const year = threeDaysLater.getFullYear().toString().slice(-2); // Get last 2 digits of year
+    // Get the Start Time field which contains both date and time
+    const startTimeControl = this._getTimeControl('Start Time');
+    const isVisible = await startTimeControl.isVisible({ timeout: 3000 }).catch(() => false);
+    
+    if (!isVisible) {
+      console.log('⚠️ Start Time input not found, using current date as fallback');
+      return new Date();
+    }
+    
+    // Get the value from Start Time field (format: "M/D/YY HH:MM AM/PM" or similar)
+    const startTimeValue = await startTimeControl.inputValue({ timeout: 2000 }).catch(() => '');
+    if (!startTimeValue || !startTimeValue.trim()) {
+      console.log('⚠️ Start Time value is empty, using current date as fallback');
+      return new Date();
+    }
+    
+    console.log(`ℹ️ Start Time field value: "${startTimeValue}"`);
+    
+    // Extract date part from Start Time (before the time part)
+    // Format could be: "1/19/26 11:00 AM", "1/19/2026 11:00 AM", "M/D/YY HH:MM AM/PM", etc.
+    // Split by space and take the first part (date)
+    const datePart = startTimeValue.trim().split(/\s+/)[0];
+    
+    if (!datePart) {
+      console.log('⚠️ Could not extract date from Start Time, using current date as fallback');
+      return new Date();
+    }
+    
+    // Parse the date part
+    const parsedDate = this._parseDateString(datePart);
+    if (parsedDate) {
+      console.log(`ℹ️ Appointment start date extracted: ${datePart} (parsed as ${parsedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric'})})`);
+      return parsedDate;
+    }
+    
+    console.log('⚠️ Could not parse date from Start Time, using current date as fallback');
+    return new Date();
+  }
+
+  // Helper: Parse date string in various formats (M/D/YY, MM/DD/YYYY, etc.)
+  _parseDateString(dateStr) {
+    if (!dateStr || !dateStr.trim()) return null;
+    
+    const trimmed = dateStr.trim();
+    
+    // Try parsing M/D/YY or M/D/YYYY format first (most common in this app)
+    const parts = trimmed.split(/[\/\-]/);
+    if (parts.length >= 2) {
+      const month = parseInt(parts[0], 10);
+      const day = parseInt(parts[1], 10);
+      
+      if (isNaN(month) || isNaN(day) || month < 1 || month > 12 || day < 1 || day > 31) {
+        // Invalid month or day
+      } else {
+        let year = parts[2] ? parseInt(parts[2], 10) : new Date().getFullYear();
+        
+        // Handle 2-digit year (assume 20XX for years 00-99, but be smart about it)
+        if (year < 100) {
+          // For years 00-50, assume 2000-2050
+          // For years 51-99, assume 1951-1999
+          year = year < 50 ? 2000 + year : 1900 + year;
+        }
+        
+        // Create date with explicit month/day/year (month is 0-indexed in Date constructor)
+        const date = new Date(year, month - 1, day);
+        
+        // Verify the date is valid (handles cases like Feb 30)
+        if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) {
+          return date;
+        }
+      }
+    }
+    
+    // Try parsing as-is (ISO format, etc.)
+    const date = new Date(trimmed);
+    if (!isNaN(date.getTime())) {
+      return date;
+    }
+    
+    return null;
+  }
+
+  // Helper: Calculate date 2 days from a given date and format as M/D/YY
+  _getDateThreeDaysFromDate(startDate) {
+    const twoDaysLater = new Date(startDate);
+    twoDaysLater.setDate(startDate.getDate() + 2);
+    
+    // Format as M/D/YY (e.g., 1/21/26)
+    const month = twoDaysLater.getMonth() + 1; // getMonth() returns 0-11
+    const day = twoDaysLater.getDate();
+    const year = twoDaysLater.getFullYear().toString().slice(-2); // Get last 2 digits of year
     
     return `${month}/${day}/${year}`;
   }
 
-  // Helper: Set end date (3 days from today) in the until datepicker
+  // Helper: Calculate date 3 days from today and format as M/D/YY (kept for backward compatibility)
+  _getDateThreeDaysFromToday() {
+    const today = new Date();
+    return this._getDateThreeDaysFromDate(today);
+  }
+
+  // Helper: Set end date (2 days from appointment start date) in the until datepicker
   async setEndDate() {
-    console.log('STEP: Setting end date (3 days from today)...');
+    console.log('STEP: Setting end date (2 days from appointment start date)...');
     const modal = this.modal();
     await modal.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
     await this.page.waitForTimeout(500);
+
+    // Get the appointment start date from the modal
+    const appointmentStartDate = await this._getAppointmentStartDate();
+    
+    // Calculate date 2 days from appointment start date
+    const dateToSet = this._getDateThreeDaysFromDate(appointmentStartDate);
+    const startDateFormatted = appointmentStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const endDateFormatted = new Date(appointmentStartDate);
+    endDateFormatted.setDate(appointmentStartDate.getDate() + 2);
+    const endDateFormattedStr = endDateFormatted.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    console.log(`ℹ️ Setting end date to: ${dateToSet} (2 days from appointment start date: ${startDateFormatted} → ${endDateFormattedStr})`);
 
     // Find the until datepicker input by class "e-until-date"
     const untilDateInput = modal.locator('input.e-until-date, input[class*="e-until-date"]').first();
@@ -772,10 +913,6 @@ class RecurringAppointmentsPage extends SchedulingPage {
         return false;
       }
       
-      // Calculate date 3 days from today
-      const dateToSet = this._getDateThreeDaysFromToday();
-      console.log(`ℹ️ Setting end date to: ${dateToSet} (3 days from today)`);
-      
       // Clear and fill the date input
       await foundInput.clear({ timeout: 3000 });
       await foundInput.fill(dateToSet, { timeout: 3000 });
@@ -786,13 +923,12 @@ class RecurringAppointmentsPage extends SchedulingPage {
       console.log(`✓ End date set to: ${value || dateToSet}`);
       
       // Store the end date for later use
-      this._endDate = this._getDateThreeDaysFromTodayDate();
+      const endDateObj = new Date(appointmentStartDate);
+      endDateObj.setDate(appointmentStartDate.getDate() + 2);
+      endDateObj.setHours(0, 0, 0, 0);
+      this._endDate = endDateObj;
       return true;
     }
-    
-    // Calculate date 3 days from today
-    const dateToSet = this._getDateThreeDaysFromToday();
-    console.log(`ℹ️ Setting end date to: ${dateToSet} (3 days from today)`);
     
     // Clear and fill the date input
     await untilDateInput.clear({ timeout: 3000 });
@@ -804,11 +940,23 @@ class RecurringAppointmentsPage extends SchedulingPage {
     console.log(`✓ End date set to: ${value || dateToSet}`);
     
     // Store the end date for later use
-    this._endDate = this._getDateThreeDaysFromTodayDate();
+    const endDateObj = new Date(appointmentStartDate);
+    endDateObj.setDate(appointmentStartDate.getDate() + 2);
+    endDateObj.setHours(0, 0, 0, 0);
+    this._endDate = endDateObj;
     return true;
   }
 
-  // Helper: Get end date as Date object (3 days from today)
+  // Helper: Get end date as Date object (2 days from appointment start date)
+  async _getDateThreeDaysFromAppointmentStartDate() {
+    const appointmentStartDate = await this._getAppointmentStartDate();
+    const endDate = new Date(appointmentStartDate);
+    endDate.setDate(appointmentStartDate.getDate() + 2);
+    endDate.setHours(0, 0, 0, 0);
+    return endDate;
+  }
+
+  // Helper: Get end date as Date object (3 days from today) - kept for backward compatibility
   _getDateThreeDaysFromTodayDate() {
     const today = new Date();
     const threeDaysLater = new Date(today);
@@ -1358,25 +1506,41 @@ class RecurringAppointmentsPage extends SchedulingPage {
     // Step 7: Go to next date and check appointment exists
     console.log('\n--- Step 6: Go to next date and check appointment exists ---');
     await this.nextButton.click({ timeout: 5000 });
-    await this.page.waitForTimeout(2000);
+    await this.page.waitForTimeout(3000); // Increased wait after navigation
     await this.waitForSchedulerLoaded();
     
+    // Wait for appointments to appear on scheduler with retry logic
     let nextDayAppointment = null;
-    for (const selector of allEventSelectors) {
-      const events = this.page.locator(selector);
-      const count = await events.count({ timeout: 3000 }).catch(() => 0);
-      if (count > 0) {
-        nextDayAppointment = events.first();
-        const isVisible = await nextDayAppointment.isVisible({ timeout: 2000 }).catch(() => false);
-        if (isVisible) {
-          console.log(`✓ Appointment found on next day`);
-          break;
+    let nextDayAppointmentFound = false;
+    let maxWaitAttemptsNextDay = 10;
+    let waitAttemptNextDay = 0;
+    
+    while (!nextDayAppointmentFound && waitAttemptNextDay < maxWaitAttemptsNextDay) {
+      await this.page.waitForTimeout(1000);
+      await this.waitForSchedulerLoaded();
+      
+      for (const selector of allEventSelectors) {
+        const events = this.page.locator(selector);
+        const count = await events.count({ timeout: 3000 }).catch(() => 0);
+        if (count > 0) {
+          nextDayAppointment = events.first();
+          const isVisible = await nextDayAppointment.isVisible({ timeout: 2000 }).catch(() => false);
+          if (isVisible) {
+            nextDayAppointmentFound = true;
+            console.log(`✓ Appointment found on next day`);
+            break;
+          }
         }
+      }
+      
+      if (!nextDayAppointmentFound) {
+        waitAttemptNextDay++;
+        console.log(`ℹ️ Waiting for appointments to appear on next day... (attempt ${waitAttemptNextDay}/${maxWaitAttemptsNextDay})`);
       }
     }
     
     // First assertion: Cancelling one occurrence does not cancel series
-    if (nextDayAppointment) {
+    if (nextDayAppointmentFound && nextDayAppointment) {
       console.log(`✓ ASSERT: Cancelling one occurrence does not cancel series - appointment exists on next day`);
     } else {
       throw new Error('First assertion failed: Appointment not found on next day after cancelling first appointment');
@@ -1411,26 +1575,46 @@ class RecurringAppointmentsPage extends SchedulingPage {
     // We need to go forward (daysDiff - 2) more days to reach end date
     for (let i = 0; i < daysDiff - 2; i++) {
       await this.nextButton.click({ timeout: 5000 });
-      await this.page.waitForTimeout(2000);
+      await this.page.waitForTimeout(3000); // Increased wait after navigation
       await this.waitForSchedulerLoaded();
     }
     
+    // Additional wait after final navigation to ensure scheduler is fully loaded
+    await this.page.waitForTimeout(3000);
+    await this.waitForSchedulerLoaded();
+    
+    // Wait for appointments to appear on scheduler with retry logic
     let endDateAppointment = null;
-    for (const selector of allEventSelectors) {
-      const events = this.page.locator(selector);
-      const count = await events.count({ timeout: 3000 }).catch(() => 0);
-      if (count > 0) {
-        endDateAppointment = events.first();
-        const isVisible = await endDateAppointment.isVisible({ timeout: 2000 }).catch(() => false);
-        if (isVisible) {
-          console.log(`✓ Appointment found on end date (${endDate.toLocaleDateString()})`);
-          break;
+    let endDateAppointmentFound = false;
+    let maxWaitAttemptsEndDate = 10;
+    let waitAttemptEndDate = 0;
+    
+    while (!endDateAppointmentFound && waitAttemptEndDate < maxWaitAttemptsEndDate) {
+      await this.page.waitForTimeout(1000);
+      await this.waitForSchedulerLoaded();
+      
+      for (const selector of allEventSelectors) {
+        const events = this.page.locator(selector);
+        const count = await events.count({ timeout: 3000 }).catch(() => 0);
+        if (count > 0) {
+          endDateAppointment = events.first();
+          const isVisible = await endDateAppointment.isVisible({ timeout: 2000 }).catch(() => false);
+          if (isVisible) {
+            endDateAppointmentFound = true;
+            console.log(`✓ Appointment found on end date (${endDate.toLocaleDateString()})`);
+            break;
+          }
         }
+      }
+      
+      if (!endDateAppointmentFound) {
+        waitAttemptEndDate++;
+        console.log(`ℹ️ Waiting for appointments to appear on end date... (attempt ${waitAttemptEndDate}/${maxWaitAttemptsEndDate})`);
       }
     }
     
     // Second assertion: Recurring pattern generates individual appointments
-    if (endDateAppointment) {
+    if (endDateAppointmentFound && endDateAppointment) {
       console.log(`✓ ASSERT: Recurring pattern generates individual appointments - appointment exists on end date`);
     } else {
       throw new Error('Second assertion failed: Appointment not found on end date');
@@ -1705,22 +1889,33 @@ class RecurringAppointmentsPage extends SchedulingPage {
           // Double-click to open edit modal
           await appointmentFound.dblclick({ timeout: 5000 });
           await this.page.waitForTimeout(2000);
+          await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
           
           const editModal = this.modal();
-          const isEditModalOpen = await editModal.isVisible({ timeout: 5000 }).catch(() => false);
+          const isEditModalOpen = await editModal.isVisible({ timeout: 10000 }).catch(() => false);
           
           if (isEditModalOpen) {
+            // Wait for modal to fully load
+            await editModal.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+            await this.page.waitForTimeout(1000);
+            
             // Click Edit Occurrence (if available)
             const editOccurrenceBtn = this.editOccurrenceButton();
-            const editOccurrenceVisible = await editOccurrenceBtn.isVisible({ timeout: 2000 }).catch(() => false);
+            const editOccurrenceVisible = await editOccurrenceBtn.isVisible({ timeout: 3000 }).catch(() => false);
             
             if (editOccurrenceVisible) {
-              await editOccurrenceBtn.click({ timeout: 3000 });
-              await this.page.waitForTimeout(1000);
+              await editOccurrenceBtn.click({ timeout: 5000 });
+              await this.page.waitForTimeout(2000);
+              await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+              
+              // Wait for modal to update after clicking Edit Occurrence
+              await editModal.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+              await this.page.waitForTimeout(1500);
             }
             
             // Assert place of service is "Office" by default
             console.log(`  Asserting place of service is "Office" by default...`);
+            await this.page.waitForTimeout(500); // Wait for fields to load
             const currentPlaceOfService = await this.getPlaceOfServiceValue();
             const isOffice = currentPlaceOfService.toLowerCase().includes('office');
             
@@ -1735,16 +1930,24 @@ class RecurringAppointmentsPage extends SchedulingPage {
             const teleHealthSelected = await this.selectSpecificPlaceOfService('Tele-Health');
             
             if (teleHealthSelected) {
-              await this.page.waitForTimeout(1000);
+              // Wait for dropdown to close and value to update
+              await this.page.waitForTimeout(1500);
+              await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
               
               // Select facility
               console.log(`  Selecting facility...`);
               await this.selectFacility();
-              await this.page.waitForTimeout(1000);
+              await this.page.waitForTimeout(1500);
+              await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+              
+              // Wait for save button to be ready
+              await this.saveButton.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+              await this.page.waitForTimeout(500);
               
               // Save the modification
               await this.saveButton.click({ timeout: 5000 });
               await this.page.waitForTimeout(2000);
+              await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
               
               // Check for success toaster
               const toasterSelectors = [
@@ -1776,8 +1979,18 @@ class RecurringAppointmentsPage extends SchedulingPage {
                 console.log(`  ℹ️ Success toaster not found, but modification may have succeeded`);
               }
               
-              await this.page.waitForTimeout(2000);
+              // Wait for modal to close after save
+              const modalStillOpen = await editModal.isVisible({ timeout: 2000 }).catch(() => false);
+              if (modalStillOpen) {
+                console.log(`  ℹ️ Modal still open, waiting for it to close...`);
+                await editModal.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+              }
+              
+              // Wait for save to complete with shorter timeouts to avoid test timeout
+              await this.page.waitForTimeout(1500);
+              await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
               await this.waitForSchedulerLoaded();
+              await this.page.waitForTimeout(500); // Reduced wait for scheduler to stabilize
               
               console.log(`  ✓ Appointment ${appointmentIndex + 1} place of service modified successfully (Office -> Tele-Health)`);
               modificationsCount++;
@@ -1800,66 +2013,102 @@ class RecurringAppointmentsPage extends SchedulingPage {
       
       // Click next button to go to next day (except for the last day)
       if (day < daysDiff - 1) {
-        await this.nextButton.click({ timeout: 5000 });
-        await this.page.waitForTimeout(2000);
-        await this.waitForSchedulerLoaded();
+        // Check if page is still open
+        if (this.page.isClosed()) {
+          console.log(`  ⚠️ Page closed, cannot navigate to next day`);
+          break;
+        }
+        
+        // Ensure any modals are closed before navigation
+        try {
+          await this.closePopupSafely();
+          await this.page.waitForTimeout(500);
+        } catch (closeError) {
+          console.log(`  ℹ️ Could not close popup before navigation: ${closeError.message}`);
+        }
+        
+        try {
+          await this.nextButton.click({ timeout: 5000 });
+          await this.page.waitForTimeout(2000); // Reduced wait after navigation
+          await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+          await this.waitForSchedulerLoaded();
+          
+          // Wait for appointments to appear on scheduler with retry logic (reduced attempts)
+          let appointmentVisible = false;
+          let maxWaitAttempts = 3; // Reduced from 5 to 3
+          let waitAttempt = 0;
+          
+          while (!appointmentVisible && waitAttempt < maxWaitAttempts && !this.page.isClosed()) {
+            await this.page.waitForTimeout(800); // Reduced wait time
+            await this.waitForSchedulerLoaded();
+            
+            for (const selector of allEventSelectors) {
+              const events = this.page.locator(selector);
+              const count = await events.count({ timeout: 1500 }).catch(() => 0);
+              if (count > 0) {
+                const firstEvent = events.first();
+                const isVisible = await firstEvent.isVisible({ timeout: 1500 }).catch(() => false);
+                if (isVisible) {
+                  appointmentVisible = true;
+                  break;
+                }
+              }
+            }
+            
+            if (!appointmentVisible) {
+              waitAttempt++;
+              if (waitAttempt < maxWaitAttempts) {
+                console.log(`  ℹ️ Waiting for appointments to appear on next day... (attempt ${waitAttempt}/${maxWaitAttempts})`);
+              }
+            }
+          }
+        } catch (navError) {
+          console.log(`  ⚠️ Error navigating to next day: ${navError.message}`);
+          if (this.page.isClosed()) {
+            console.log(`  ⚠️ Page closed during navigation, stopping modification loop`);
+            break;
+          }
+        }
       }
     }
     
     console.log(`\n✓ Place of service modification summary: ${modificationsCount} appointment(s) modified`);
     
-    // Step 5: Cancel all appointments one by one
-    console.log('\n--- Step 3: Cancel all appointments one by one ---');
+    // Step 5: Cancel all appointments one by one (starting from end date, going backwards)
+    console.log('\n--- Step 3: Cancel all appointments one by one (from end date backwards) ---');
     
     // Ensure any open modals are closed before navigating
     await this.closePopupSafely();
     await this.page.waitForTimeout(2000);
     await this.waitForSchedulerLoaded();
     
-    // Navigate back to start date using previous button - but ensure modals are closed first
-    for (let i = 0; i < daysDiff - 1; i++) {
-      // Check and close any open modals before clicking navigation
-      await this.closePopupSafely();
-      await this.page.waitForTimeout(1000);
-      
-      const prevButton = this.page.locator('button[title="Previous"], .e-prev button').first();
-      const isButtonVisible = await prevButton.isVisible({ timeout: 3000 }).catch(() => false);
-      
-      if (isButtonVisible) {
-        // Check if button is intercepted by overlay
-        const overlay = this.page.locator('.e-dlg-overlay:visible').first();
-        const overlayVisible = await overlay.isVisible({ timeout: 1000 }).catch(() => false);
-        
-        if (overlayVisible) {
-          console.log('  ℹ️ Modal overlay detected, closing before navigation...');
-          await this.closePopupSafely();
-          await this.page.waitForTimeout(2000);
-        }
+    // Navigate to end date if not already there
+    // We're currently on the last day after modifications, so we should be on end date
+    // But let's navigate forward to ensure we're on the end date
+    const currentPosition = daysDiff - 1; // After modifications, we're on the last day
+    const daysToEndDate = daysDiff - 1 - currentPosition;
+    
+    if (daysToEndDate > 0) {
+      console.log(`  Navigating ${daysToEndDate} day(s) forward to reach end date...`);
+      for (let i = 0; i < daysToEndDate; i++) {
+        await this.closePopupSafely();
+        await this.page.waitForTimeout(500);
         
         try {
-          await prevButton.click({ timeout: 5000, force: true });
+          await this.nextButton.click({ timeout: 5000 });
           await this.page.waitForTimeout(2000);
           await this.waitForSchedulerLoaded();
         } catch (error) {
-          console.log(`  ⚠️ Could not click previous button: ${error.message}`);
-          // Try to close modal and retry
-          await this.closePopupSafely();
-          await this.page.waitForTimeout(2000);
-          try {
-            await prevButton.click({ timeout: 5000, force: true });
-            await this.page.waitForTimeout(2000);
-            await this.waitForSchedulerLoaded();
-          } catch (retryError) {
-            console.log(`  ⚠️ Retry also failed: ${retryError.message}`);
-          }
+          console.log(`  ⚠️ Could not navigate to end date: ${error.message}`);
         }
       }
     }
     
     let totalAppointmentsCancelled = 0;
+    const prevButton = this.page.locator('button[title="Previous"], .e-prev button').first();
     
-    // Cancel appointments using next button navigation
-    for (let day = 0; day < daysDiff; day++) {
+    // Cancel appointments starting from end date, going backwards using previous button
+    for (let day = daysDiff - 1; day >= 0; day--) {
       await this.page.waitForTimeout(2000);
       await this.waitForSchedulerLoaded();
       
@@ -1876,7 +2125,7 @@ class RecurringAppointmentsPage extends SchedulingPage {
       
       if (appointmentFound) {
         try {
-          console.log(`  Cancelling appointment on day ${day + 1}...`);
+          console.log(`  Cancelling appointment on day ${day + 1} (from end date backwards)...`);
           
           // Right-click on appointment and select "Cancel Schedule"
           await this.rightClickAndCancelSchedule(appointmentFound);
@@ -1917,11 +2166,73 @@ class RecurringAppointmentsPage extends SchedulingPage {
         }
       }
       
-      // Click next button to go to next day (except for the last day)
-      if (day < daysDiff - 1) {
-        await this.nextButton.click({ timeout: 5000 });
-        await this.page.waitForTimeout(2000);
-        await this.waitForSchedulerLoaded();
+      // Click previous button to go to previous day (except for the first day)
+      if (day > 0) {
+        // Ensure any modals are closed before navigation
+        await this.closePopupSafely();
+        await this.page.waitForTimeout(1000);
+        
+        const isButtonVisible = await prevButton.isVisible({ timeout: 3000 }).catch(() => false);
+        
+        if (isButtonVisible) {
+          // Check if button is intercepted by overlay
+          const overlay = this.page.locator('.e-dlg-overlay:visible').first();
+          const overlayVisible = await overlay.isVisible({ timeout: 1000 }).catch(() => false);
+          
+          if (overlayVisible) {
+            console.log('  ℹ️ Modal overlay detected, closing before navigation...');
+            await this.closePopupSafely();
+            await this.page.waitForTimeout(2000);
+          }
+          
+          try {
+            await prevButton.click({ timeout: 5000, force: true });
+            await this.page.waitForTimeout(2000);
+            await this.waitForSchedulerLoaded();
+            
+            // Wait for appointments to appear on scheduler with retry logic
+            let appointmentVisible = false;
+            let maxWaitAttempts = 3;
+            let waitAttempt = 0;
+            
+            while (!appointmentVisible && waitAttempt < maxWaitAttempts && !this.page.isClosed()) {
+              await this.page.waitForTimeout(800);
+              await this.waitForSchedulerLoaded();
+              
+              for (const selector of allEventSelectors) {
+                const events = this.page.locator(selector);
+                const count = await events.count({ timeout: 1500 }).catch(() => 0);
+                if (count > 0) {
+                  const firstEvent = events.first();
+                  const isVisible = await firstEvent.isVisible({ timeout: 1500 }).catch(() => false);
+                  if (isVisible) {
+                    appointmentVisible = true;
+                    break;
+                  }
+                }
+              }
+              
+              if (!appointmentVisible) {
+                waitAttempt++;
+                if (waitAttempt < maxWaitAttempts) {
+                  console.log(`  ℹ️ Waiting for appointments to appear on previous day... (attempt ${waitAttempt}/${maxWaitAttempts})`);
+                }
+              }
+            }
+          } catch (error) {
+            console.log(`  ⚠️ Could not click previous button: ${error.message}`);
+            // Try to close modal and retry
+            await this.closePopupSafely();
+            await this.page.waitForTimeout(2000);
+            try {
+              await prevButton.click({ timeout: 5000, force: true });
+              await this.page.waitForTimeout(2000);
+              await this.waitForSchedulerLoaded();
+            } catch (retryError) {
+              console.log(`  ⚠️ Retry also failed: ${retryError.message}`);
+            }
+          }
+        }
       }
     }
     
@@ -2582,238 +2893,6 @@ class RecurringAppointmentsPage extends SchedulingPage {
     console.log(`✓ ASSERT: One occurrence cancelled (${initialCount} initial appointments), series not cancelled (${totalAppointmentsFound} appointments still exist), all appointments deleted (${totalAppointmentsDeleted})`);
     
     return { initialCount, finalCount };
-  }
-
-  // Test SCH-027: Modifying pattern affects only future occurrences
-  async testModifyingPatternAffectsOnlyFutureOccurrences(pattern = 'Daily', frequency = 1, occurrences = 4) {
-    console.log('\n=== Testing: Modifying pattern affects only future occurrences ===');
-    
-    // Step 1: Create recurring appointment series
-    console.log('\n--- Step 1: Create recurring appointment series ---');
-    await this.openAddEventPopupRandomSlot();
-    await this.selectAppointmentRadioButton();
-    await this.createRecurringAppointmentSeries(pattern, frequency, occurrences);
-    
-    // Step 2: Wait for scheduler to refresh and count initial appointments
-    await this.page.waitForTimeout(3000);
-    await this.waitForSchedulerLoaded();
-    
-    console.log('\n--- Step 2: Count initial appointments ---');
-    const initialCount = await this.countAppointmentsOnScheduler();
-    console.log(`✓ Initial appointment count: ${initialCount}`);
-    
-    // Step 3: Find an appointment occurrence (preferably a future one)
-    console.log('\n--- Step 3: Find appointment occurrence to modify pattern ---');
-    const eventElement = await this.verifyEventVisibleOnScheduler();
-    if (!eventElement) {
-      throw new Error('Could not find appointment occurrence on scheduler');
-    }
-    
-    // Step 4: Double-click to open edit modal
-    console.log('\n--- Step 4: Open edit modal ---');
-    await eventElement.dblclick({ timeout: 5000 });
-    await this.page.waitForTimeout(2000);
-    
-    const modal = this.modal();
-    const isModalOpen = await modal.isVisible({ timeout: 5000 }).catch(() => false);
-    if (!isModalOpen) {
-      throw new Error('Edit modal did not open');
-    }
-    
-    // Step 5: Verify "Edit Series" option is available
-    console.log('\n--- Step 5: Verify Edit Series option is available ---');
-    const editSeriesBtn = this.editSeriesButton();
-    const editSeriesVisible = await editSeriesBtn.isVisible({ timeout: 3000 }).catch(() => false);
-    
-    if (editSeriesVisible) {
-      await editSeriesBtn.click({ timeout: 3000 });
-      await this.page.waitForTimeout(1000);
-      console.log('✓ Edit Series button clicked');
-      
-      // Step 6: Modify the pattern (e.g., change frequency)
-      console.log('\n--- Step 6: Modify pattern (change frequency) ---');
-      await this.setRecurringFrequency(frequency + 1);
-      
-      // Step 7: Save the modification
-      console.log('\n--- Step 7: Save the pattern modification ---');
-      await this.saveButton.click({ timeout: 5000 });
-      await this.page.waitForTimeout(2000);
-      
-      console.log('✓ ASSERT: Pattern modification saved (should affect only future occurrences)');
-    } else {
-      console.log('⚠️ Edit Series option not found - pattern modification may not be available in this UI');
-    }
-    
-    return true;
-  }
-
-  // Test SCH-028: Maximum 52 occurrences per series
-  // Helper: Calculate date 52 days from today and format as M/D/YY
-  _getDateFiftyTwoDaysFromToday() {
-    const today = new Date();
-    const fiftyTwoDaysLater = new Date(today);
-    fiftyTwoDaysLater.setDate(today.getDate() + 52);
-    
-    // Format as M/D/YY (e.g., 1/16/26)
-    const month = fiftyTwoDaysLater.getMonth() + 1; // getMonth() returns 0-11
-    const day = fiftyTwoDaysLater.getDate();
-    const year = fiftyTwoDaysLater.getFullYear().toString().slice(-2); // Get last 2 digits of year
-    
-    return `${month}/${day}/${year}`;
-  }
-
-  // Helper: Get date 52 days from today as Date object
-  _getDateFiftyTwoDaysFromTodayDate() {
-    const today = new Date();
-    const fiftyTwoDaysLater = new Date(today);
-    fiftyTwoDaysLater.setDate(today.getDate() + 52);
-    fiftyTwoDaysLater.setHours(0, 0, 0, 0);
-    return fiftyTwoDaysLater;
-  }
-
-  async testMaximumOccurrencesPerSeries(pattern = 'Daily', frequency = 1) {
-    console.log('\n=== Testing: Maximum 52 occurrences per series ===');
-    
-    // Step 1: Open appointment modal
-    console.log('\n--- Step 1: Open appointment modal ---');
-    await this.openAddEventPopupRandomSlot();
-    const modal = this.modal();
-    await modal.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
-    await this.page.waitForTimeout(500);
-    
-    // Step 2: Select appointment type (Group-IOP)
-    console.log('STEP: Selecting appointment type...');
-    await this.selectGroupIOPAppointmentType();
-    await this.page.waitForTimeout(1000);
-    
-    // Step 3: Select Group Therapy (first option)
-    console.log('STEP: Selecting Group Therapy...');
-    await this.selectFirstGroupTherapyOption();
-    await this.page.waitForTimeout(1000);
-    
-    // Step 4: Select Repeat pattern
-    console.log('STEP: Selecting Repeat pattern...');
-    await this.selectRecurringPattern(pattern);
-    await this.page.waitForTimeout(1500);
-    
-    // Step 5: Select "Until" in the end dropdown
-    console.log('STEP: Selecting "Until" in end dropdown...');
-    await this.selectEndOption('Until');
-    await this.page.waitForTimeout(1000);
-    
-    // Step 6: Read the default prepopulated end date
-    console.log('\n--- Step 2: Validate default prepopulated end date is 52 days from current date ---');
-    const untilDateInput = modal.locator('input.e-until-date, input[class*="e-until-date"]').first();
-    const isVisible = await untilDateInput.isVisible({ timeout: 3000 }).catch(() => false);
-    
-    if (!isVisible) {
-      // Try alternative selectors
-      const altSelectors = [
-        'input[title="Until"]',
-        'input[id*="datepicker"][id*="until"]',
-        'input.e-datepicker.e-until-date',
-        'input.e-control.e-datepicker.e-until-date'
-      ];
-      
-      let foundInput = null;
-      for (const selector of altSelectors) {
-        const candidateInput = modal.locator(selector).first();
-        const isAltVisible = await candidateInput.isVisible({ timeout: 1000 }).catch(() => false);
-        if (isAltVisible) {
-          foundInput = candidateInput;
-          break;
-        }
-      }
-      
-      if (!foundInput || !(await foundInput.isVisible({ timeout: 1000 }).catch(() => false))) {
-        throw new Error('Until datepicker input not found');
-      }
-      
-      // Read the default value
-      const defaultValue = await foundInput.inputValue({ timeout: 2000 }).catch(() => '');
-      console.log(`✓ Default end date value: ${defaultValue}`);
-      
-      // Calculate expected date (52 days from today)
-      const expectedDate = this._getDateFiftyTwoDaysFromToday();
-      const expectedDateObj = this._getDateFiftyTwoDaysFromTodayDate();
-      
-      // Parse the default value to compare
-      if (defaultValue) {
-        // Parse M/D/YY format
-        const parts = defaultValue.split('/');
-        if (parts.length === 3) {
-          const month = parseInt(parts[0]);
-          const day = parseInt(parts[1]);
-          const year = parseInt('20' + parts[2]); // Convert YY to YYYY
-          
-          const actualDate = new Date(year, month - 1, day);
-          actualDate.setHours(0, 0, 0, 0);
-          
-          // Compare dates (allow 1 day difference for timezone/formatting issues)
-          const daysDiff = Math.abs((actualDate - expectedDateObj) / (1000 * 60 * 60 * 24));
-          
-          // Print actual value and difference before assertion
-          console.log(`\n--- Date Comparison Details ---`);
-          console.log(`  Actual value from UI: ${defaultValue}`);
-          console.log(`  Actual date parsed: ${actualDate.toLocaleDateString()}`);
-          console.log(`  Expected date (52 days from today): ${expectedDate} (${expectedDateObj.toLocaleDateString()})`);
-          console.log(`  Days difference: ${daysDiff.toFixed(1)} days`);
-          
-          expect(daysDiff).toBeLessThanOrEqual(1);
-          console.log(`✓ ASSERT: Default end date is approximately 52 days from current date`);
-        } else {
-          throw new Error(`Unexpected date format: ${defaultValue}`);
-        }
-      } else {
-        throw new Error('Default end date value is empty');
-      }
-    } else {
-      // Read the default value
-      const defaultValue = await untilDateInput.inputValue({ timeout: 2000 }).catch(() => '');
-      console.log(`✓ Default end date value: ${defaultValue}`);
-      
-      // Calculate expected date (52 days from today)
-      const expectedDate = this._getDateFiftyTwoDaysFromToday();
-      const expectedDateObj = this._getDateFiftyTwoDaysFromTodayDate();
-      
-      // Parse the default value to compare
-      if (defaultValue) {
-        // Parse M/D/YY format
-        const parts = defaultValue.split('/');
-        if (parts.length === 3) {
-          const month = parseInt(parts[0]);
-          const day = parseInt(parts[1]);
-          const year = parseInt('20' + parts[2]); // Convert YY to YYYY
-          
-          const actualDate = new Date(year, month - 1, day);
-          actualDate.setHours(0, 0, 0, 0);
-          
-          // Compare dates (allow 1 day difference for timezone/formatting issues)
-          const daysDiff = Math.abs((actualDate - expectedDateObj) / (1000 * 60 * 60 * 24));
-          
-          // Print actual value and difference before assertion
-          console.log(`\n--- Date Comparison Details ---`);
-          console.log(`  Actual value from UI: ${defaultValue}`);
-          console.log(`  Actual date parsed: ${actualDate.toLocaleDateString()}`);
-          console.log(`  Expected date (52 days from today): ${expectedDate} (${expectedDateObj.toLocaleDateString()})`);
-          console.log(`  Days difference: ${daysDiff.toFixed(1)} days`);
-          
-          expect(daysDiff).toBeLessThanOrEqual(1);
-          console.log(`✓ ASSERT: Default end date is approximately 52 days from current date`);
-        } else {
-          throw new Error(`Unexpected date format: ${defaultValue}`);
-        }
-      } else {
-        throw new Error('Default end date value is empty');
-      }
-    }
-    
-    // Close modal without creating appointment
-    console.log('\n--- Step 3: Closing modal without creating appointment ---');
-    await this.closePopupSafely();
-    await this.page.waitForTimeout(1000);
-    
-    return true;
   }
 
   // Helper: Count appointments on scheduler

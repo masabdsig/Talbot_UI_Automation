@@ -13,57 +13,63 @@ require("dotenv").config({ path: '.env.local' }); // Load .env.local (local only
 const TOKEN_PATH = path.join(process.cwd(), "token.json");
 const CREDENTIALS_PATH = path.join(process.cwd(), "utils/credentials.json");
 
-// async function authorize() {
-//     const credentials = JSON.parse(fs.readFileSync(CREDENTIALS_PATH, "utf8"));
-
-//     const { client_secret, client_id, redirect_uris } = credentials.installed;
-
-//     const oAuth2Client = new google.auth.OAuth2(
-//         client_id,
-//         client_secret,
-//         redirect_uris[0]
-//     );
-
-//     if (fs.existsSync(TOKEN_PATH)) {
-//         oAuth2Client.setCredentials(
-//             JSON.parse(fs.readFileSync(TOKEN_PATH, "utf8"))
-//         );
-//         return oAuth2Client;
-//     }
-
-//     const authUrl = oAuth2Client.generateAuthUrl({
-//         access_type: "offline",
-//         scope: ["https://www.googleapis.com/auth/gmail.readonly"],
-//     });
-
-//     console.log("\n👉 Open this URL in your browser:\n");
-//     console.log(authUrl);
-
-//     const readline = require("readline").createInterface({
-//         input: process.stdin,
-//         output: process.stdout,
-//     });
-
-//     return new Promise((resolve, reject) => {
-//         readline.question("\nPaste the code here: ", async code => {
-//             readline.close();
-
-//             try {
-//                 const { tokens } = await oAuth2Client.getToken(code);
-//                 oAuth2Client.setCredentials(tokens);
-
-//                 fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
-//                 console.log("\n✅ Token saved to:", TOKEN_PATH);
-//                 resolve(oAuth2Client);
-//             } catch (err) {
-//                 reject(err);
-//             }
-//         });
-//     });
-// }
-
 // push to Github Actions
 async function authorize() {
+    // First, try to use token.json if it exists
+    if (fs.existsSync(TOKEN_PATH)) {
+        try {
+            const tokenData = JSON.parse(fs.readFileSync(TOKEN_PATH, "utf8"));
+            
+            // Validate token.json has required fields
+            if (!tokenData.refresh_token && !tokenData.access_token) {
+                throw new Error('token.json is missing both refresh_token and access_token');
+            }
+            
+            // Check if we have credentials.json for client ID/secret
+            if (fs.existsSync(CREDENTIALS_PATH)) {
+                const credentials = JSON.parse(fs.readFileSync(CREDENTIALS_PATH, "utf8"));
+                const { client_secret, client_id, redirect_uris } = credentials.installed || credentials.web || {};
+                
+                if (client_id && client_secret) {
+                    const oAuth2Client = new google.auth.OAuth2(
+                        client_id,
+                        client_secret,
+                        redirect_uris?.[0] || 'http://localhost:3000/oauth2callback'
+                    );
+                    
+                    // Set credentials - this includes refresh_token for automatic token refresh
+                    oAuth2Client.setCredentials(tokenData);
+                    return oAuth2Client;
+                }
+            }
+            
+            // If token.json exists but no credentials.json, try using env vars with token.json
+            const {
+                GOOGLE_CLIENT_ID,
+                GOOGLE_CLIENT_SECRET,
+                GOOGLE_REDIRECT_URI
+            } = process.env;
+            
+            if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
+                const oAuth2Client = new google.auth.OAuth2(
+                    GOOGLE_CLIENT_ID,
+                    GOOGLE_CLIENT_SECRET,
+                    GOOGLE_REDIRECT_URI || 'http://localhost:3000/oauth2callback'
+                );
+                
+                // Set credentials - this includes refresh_token for automatic token refresh
+                oAuth2Client.setCredentials(tokenData);
+                return oAuth2Client;
+            } else {
+                throw new Error('token.json exists but GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are not set in environment variables');
+            }
+        } catch (error) {
+            console.log(`⚠️  Error using token.json: ${error.message}`);
+            console.log('   Falling back to environment variables...\n');
+        }
+    }
+    
+    // Fallback to environment variables
     const {
         GOOGLE_CLIENT_ID,
         GOOGLE_CLIENT_SECRET,
@@ -140,6 +146,23 @@ async function getLatestEmail(subjectContains, fromEmail = null, maxResults = 10
     } catch (error) {
         if (error.message.includes('not set in environment variables')) {
             throw error;
+        }
+        if (error.message && error.message.includes('invalid_grant')) {
+            // Provide helpful message about token.json
+            const tokenExists = fs.existsSync(TOKEN_PATH);
+            if (tokenExists) {
+                throw new Error(
+                    'invalid_grant: The token in token.json is invalid or expired, or doesn\'t match your current credentials.\n' +
+                    'This usually happens when:\n' +
+                    '  1. The token was generated with different Google OAuth credentials\n' +
+                    '  2. The token has expired or been revoked\n' +
+                    '  3. The client ID/secret in your .env.local don\'t match the token\n\n' +
+                    'To fix this:\n' +
+                    '  1. Run: node scripts/authorizeGmail.js (to regenerate token.json)\n' +
+                    '  2. Or run: node scripts/generateRefreshToken.js\n' +
+                    '  3. Make sure your GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local match the credentials used to generate the token'
+                );
+            }
         }
         throw new Error(`Failed to authorize Gmail API: ${error.message}`);
     }

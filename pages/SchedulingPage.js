@@ -829,6 +829,10 @@ class SchedulingPage {
     await cell.dblclick({ force: true });
   }
 
+  // Wait for modal to appear after double-click
+  await this.page.waitForTimeout(1500);
+  await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+
   await this.verifyAddEventPopupVisible();
   console.log('✓ Add Event popup opened successfully');
   }
@@ -5027,7 +5031,7 @@ class SchedulingPage {
       
       console.log('STEP: Clicking on unavailable cell to trigger error toaster...');
       await targetCell.click({ timeout: 3000 });
-      await this.page.waitForTimeout(1000); // Wait for toaster to appear
+      // await this.page.waitForTimeout(1000); // Wait for toaster to appear
       
       // Verify error toaster appears with expected message
       const toastContainer = this.page.locator('#toast-container').first();

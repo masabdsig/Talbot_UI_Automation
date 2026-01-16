@@ -91,10 +91,11 @@ async function generateRefreshToken() {
                     console.log('   Try revoking access in your Google Account settings and run this script again.\n');
                 }
 
-                // Optionally save to token.json for reference
+                // Save to token.json (this file will be used by gmailHelper.js)
                 const tokenPath = 'token.json';
                 fs.writeFileSync(tokenPath, JSON.stringify(tokens, null, 2));
-                console.log(`💾 Tokens also saved to ${tokenPath} for reference\n`);
+                console.log(`💾 Token saved to ${tokenPath}`);
+                console.log(`   This file will be used automatically by gmailHelper.js\n`);
 
                 resolve(tokens);
             } catch (error) {

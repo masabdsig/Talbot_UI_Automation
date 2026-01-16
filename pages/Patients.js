@@ -1658,7 +1658,7 @@ class PatientPage {
       // Validate First Name
       console.log(`VALIDATION: Checking Policy Holder First Name matches patient: ${patientData.firstName}`);
       // Wait for Syncfusion textbox component
-      await expect(this.page.locator('#firstName, ejs-textbox#firstName')).toBeVisible({ timeout: 10000 });
+      await expect(this.page.locator('#firstName, ejs-textbox#firstName')).toBeVisible({ timeout: 15000 });
       // Get the actual input value inside the textbox
       const firstNameInput = this.page.locator('#firstName input, ejs-textbox#firstName input').first();
       await expect(firstNameInput).toBeVisible({ timeout: 5000 });

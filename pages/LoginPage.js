@@ -154,11 +154,8 @@ class LoginPage {
     console.log('ACTION: Checking for MFA skip button...');
     const timeout = process.env.CI ? 20000 : 10000;
 
-    // Wait a bit for page to settle after login
-    await this.page.waitForTimeout(1000);
 
     // Check for MFA skip button first - if visible, we need to click it regardless of URL
-    // Wait for button to be attached, visible, and enabled
     try {
       await this.mfaSkipButton.waitFor({ state: 'attached', timeout: 3000 });
       await this.mfaSkipButton.waitFor({ state: 'visible', timeout: 3000 });
