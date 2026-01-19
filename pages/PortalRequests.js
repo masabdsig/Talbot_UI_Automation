@@ -53,6 +53,9 @@ class PortalRequestsPage {
 
     // Loading spinner
     this.loadingSpinner = page.locator('.spinner, .loader, [class*="loading"], [class*="spinner"], .ngx-spinner').first();
+
+    // Success notification/toast
+    this.successToast = page.locator('.toast-success, #toast-container:has-text("success"), [class*="success"][role="alert"]');
   }
 
   async navigateToDashboard() {
@@ -390,17 +393,28 @@ class PortalRequestsPage {
     return count;
   }
 
-  async verifyRecordInGrid(firstName, lastName) {
-    console.log(`ACTION: Verifying record with name: ${firstName} ${lastName}...`);
-    await this.page.waitForTimeout(1000);
-
-    const firstNameCell = this.gridCells.filter({ hasText: firstName }).first();
-    await expect(firstNameCell).toBeVisible({ timeout: 8000 });
-    console.log('ASSERT: First Name found in grid');
-
-    const lastNameCell = this.gridCells.filter({ hasText: lastName }).first();
-    await expect(lastNameCell).toBeVisible({ timeout: 3000 });
-    console.log('ASSERT: Last Name found in grid');
+  async verifyRecordInGrid(firstName, lastName, description = null) {
+    console.log(`ACTION: Verifying record "${firstName} ${lastName}" in same grid row...`);
+    
+    // Build locator that finds row containing ALL criteria
+    let rowLocator = this.page.locator('[role="row"]')
+      .filter({ hasText: firstName })
+      .filter({ hasText: lastName });
+    
+    if (description) {
+      rowLocator = rowLocator.filter({ hasText: description });
+    }
+    
+    // Verify the row exists
+    await expect(rowLocator.first()).toBeVisible({ timeout: 5000 });
+    
+    console.log(`  ✓ First Name "${firstName}" found in grid`);
+    console.log(`  ✓ Last Name "${lastName}" found in same row`);
+    if (description) {
+      console.log(`  ✓ Description "${description}" found in same row`);
+    }
+    
+    console.log(`ASSERT: Record "${firstName} ${lastName}" with all fields found in same grid row`);
   }
 
   async verifyRecordEmail(email) {
@@ -901,6 +915,55 @@ class PortalRequestsPage {
     return patientIdentifier;
   }
 
+  async getFirstRecordData() {
+    console.log('ACTION: Getting first record data...');
+    
+    // Find the first visible data row (skip header row at index 0)
+    const rows = this.page.locator('[role="row"]');
+    const totalRows = await rows.count();
+    
+    if (totalRows < 2) {
+      throw new Error('No data rows found in grid');
+    }
+    
+    // Find the first visible row starting from index 1
+    let firstVisibleRow = null;
+    for (let i = 1; i < totalRows; i++) {
+      const row = rows.nth(i);
+      const isVisible = await row.isVisible().catch(() => false);
+      if (isVisible) {
+        firstVisibleRow = row;
+        break;
+      }
+    }
+    
+    if (!firstVisibleRow) {
+      // If no visible row found, scroll to top and try the first data row
+      const grid = this.page.locator('[role="grid"], table').first();
+      await grid.scrollIntoViewIfNeeded();
+      await this.page.waitForTimeout(500);
+      firstVisibleRow = rows.nth(1);
+      await expect(firstVisibleRow).toBeVisible({ timeout: 5000 });
+    }
+    
+    // Extract cell data - Patient ID: 0, First Name: 1, Last Name: 2, Email: 3, Phone: 4, DOB: 5, Status: 6
+    const cells = firstVisibleRow.locator('[role="gridcell"]');
+    const firstName = await cells.nth(1).textContent();
+    const lastName = await cells.nth(2).textContent();
+    const email = await cells.nth(3).textContent();
+    const phone = await cells.nth(4).textContent();
+    
+    const recordData = {
+      firstName: firstName?.trim() || '',
+      lastName: lastName?.trim() || '',
+      email: email?.trim() || '',
+      phone: phone?.trim() || ''
+    };
+    
+    console.log(`ASSERT: Record data retrieved - First Name: ${recordData.firstName}, Last Name: ${recordData.lastName}`);
+    return recordData;
+  }
+
   async clickRejectButton() {
     console.log('ACTION: Clicking Reject button...');
     const rejectButton = this.page.getByRole('button', { name: /reject/i }).or(this.page.getByTitle('Reject')).first();
@@ -1003,9 +1066,6 @@ class PortalRequestsPage {
   async enterCustomRejectionReason(dialog, customReason) {
     console.log('ACTION: Entering custom rejection reason...');
     
-    const otherLabel = dialog.locator('label').filter({ hasText: 'Other' });
-    await otherLabel.click();
-    
     const textArea = dialog.getByRole('textbox').or(dialog.locator('input[type="text"], textarea').first());
     await expect(textArea).toBeVisible();
     
@@ -1035,35 +1095,20 @@ class PortalRequestsPage {
   }
 
   async verifySuccessNotification() {
-    console.log('ACTION: Verifying success notification...');
-    
-    // Use the same approach as TC06 - check for alert without initial visibility requirement
-    // since alerts may auto-dismiss quickly
-    const successAlert = this.page.getByRole('alert').or(
-      this.page.locator('//*[@id="toast-container"]/div/div[2]')
-    );
-    
-    // Check if alert exists and is visible, with fallback for auto-dismissed alerts
-    const alertVisible = await successAlert.isVisible({ timeout: 5000 }).catch(() => false);
-    
-    if (alertVisible) {
-      const alertText = await successAlert.textContent();
-      console.log(`ASSERT: Success alert displayed: "${alertText}"`);
-      return true;
-    } else {
-      // Try alternative selectors for success notification
-      const toastAlert = this.page.locator('[role="alert"], .toast, .alert-success, [class*="success"]').filter({ hasText: /success|reject|completed/i });
-      const toastVisible = await toastAlert.isVisible({ timeout: 2000 }).catch(() => false);
-      
-      if (toastVisible) {
-        const toastText = await toastAlert.textContent();
-        console.log(`ASSERT: Success toast displayed: "${toastText}"`);
-        return true;
-      } else {
-        console.log('⚠️ ASSERT: Success alert not visible (may have auto-dismissed)');
-        return true; // Don't fail the test as alert might have auto-dismissed
-      }
-    }
+    console.log('ACTION: Verifying success notification popup...');
+    await expect(this.successToast).toBeVisible({ timeout: 5000 });
+    const messageText = await this.successToast.textContent();
+    console.log(`ASSERT: Success message displayed: "${messageText.trim()}"`);
+    return messageText.trim();
+  }
+
+  async verifyRejectNotification() {
+    console.log('ACTION: Verifying reject notification popup...');
+    const rejectToast = this.page.locator('[role="alert"]:has-text("Successfully Reject"), .toast-message:has-text("Successfully Reject")');
+    await expect(rejectToast).toBeVisible({ timeout: 5000 });
+    const messageText = await rejectToast.textContent();
+    console.log(`ASSERT: Reject notification displayed: "${messageText.trim()}"`);
+    return messageText.trim();
   }
 
   async verifyPatientStatusChanged(originalPatient) {
@@ -1089,7 +1134,7 @@ class PortalRequestsPage {
     
     const statusComboboxFinal = this.page.getByRole('combobox').first();
     
-    if (await statusComboboxFinal.isVisible({ timeout: 2000 })) {
+    if (await statusComboboxFinal.isVisible().catch(() => false)) {
       console.log('ACTION: Clicking status dropdown to change to Rejected...');
       await statusComboboxFinal.click();
       await this.page.waitForTimeout(500);
@@ -2061,6 +2106,51 @@ class PortalRequestsPage {
     } else {
       console.log('⚠️ Could not find save button');
     }
+  }
+
+  // ==================================================================================
+  // TEST DATA MANAGEMENT - Ensure Records Exist
+  // ==================================================================================
+  async ensureRecordWithNewStatusExists() {
+    console.log('ACTION: Checking if records with New status exist...');
+    
+    // Set status filter to "New"
+    await this.setStatusFilterToNew();
+    await this.performSearch();
+    await this.waitForLoadingSpinnerToComplete();
+    
+    let recordCount = await this.getGridRecordCount();
+    
+    if (recordCount === 0) {
+      console.log('ACTION: No records with New status found - creating one...');
+      const { faker } = require('@faker-js/faker');
+      
+      const portalRequestData = {
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+        email: faker.internet.email(),
+        phone: faker.phone.number('##########'),
+        dob: Math.floor(Math.random() * 28) + 1 // Random day 1-28
+      };
+      
+      await this.clickNewRequestButton();
+      await this.verifyPortalRequestDialogOpened();
+      await this.fillFirstName(portalRequestData.firstName);
+      await this.fillLastName(portalRequestData.lastName);
+      await this.selectDateOfBirth(portalRequestData.dob);
+      await this.fillEmail(portalRequestData.email);
+      await this.fillPhone(portalRequestData.phone);
+      await this.clickSaveButton();
+      await this.verifyDialogClosed();
+      await this.page.waitForTimeout(1500);
+      
+      recordCount = await this.getGridRecordCount();
+      console.log(`ASSERT: New record created. Current record count with New status: ${recordCount}`);
+    } else {
+      console.log(`ASSERT: Found ${recordCount} record(s) with New status`);
+    }
+    
+    return recordCount;
   }
 }
 

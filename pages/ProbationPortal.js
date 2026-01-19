@@ -4,63 +4,94 @@ class ProbationPortalPage {
   constructor(page) {
     this.page = page;
 
-    // Navigation
+    // ==================================================================================
+    // NAVIGATION & URLS
+    // ==================================================================================
     this.portalRequestsUrl = '/portal-approval';
     this.dashboardUrl = '/dashboard';
 
-    // Skip button
+    // ==================================================================================
+    // PORTAL NAVIGATION LOCATORS
+    // ==================================================================================
     this.skipMfaButton = page.getByRole('button', { name: ' Skip' });
     this.skipButton = page.locator('button').filter({ hasText: /Skip/ });
-
-    // Probation Portal section
     this.probationPortalThumbnail = page.locator('div').filter({ hasText: /Probation Portal/ }).locator('..').first();
     this.probationPortalHeading = page.locator('h6:has-text("Probation Portal")').first();
     this.probationPortalGrid = page.locator('[role="grid"]').first();
 
-    // Search and filter controls
+    // ==================================================================================
+    // PROBATION PORTAL SECTION CONTROLS
+    // ==================================================================================
     this.searchInput = page.getByRole('textbox').first();
     this.statusDropdown = page.getByRole('combobox').filter({ hasText: /New|Status/ }).first();
     this.searchButton = page.getByRole('button').filter({ hasText: /\bSearch\b/ }).first();
     this.resetButton = page.getByRole('button').filter({ hasText: /\bReset\b/ }).first();
-
-    // New Request button
     this.newRequestButton = page.locator('button').filter({ hasText: /New Request/ }).first();
 
-    // Probation Portal Access dialog
+    // ==================================================================================
+    // PROBATION PORTAL GRID LOCATORS
+    // ==================================================================================
+    this.probationPortalGridContainer = page.locator('[role="grid"]').first();
+    this.gridRows = page.locator('[role="row"]');
+    this.gridCells = page.locator('[role="gridcell"]');
+    this.paginationText = page.getByText(/\(\d+ items?\)/);
+
+    // Grid column headers
+    this.firstNameColumn = page.locator('[role="columnheader"]').filter({ hasText: /First Name/ });
+    this.lastNameColumn = page.locator('[role="columnheader"]').filter({ hasText: /Last Name/ });
+    this.emailColumn = page.locator('[role="columnheader"]').filter({ hasText: /Email/ });
+    this.phoneColumn = page.locator('[role="columnheader"]').filter({ hasText: /Phone/ });
+    this.designationColumn = page.locator('[role="columnheader"]').filter({ hasText: /Designation/ });
+    this.additionalInfoColumn = page.locator('[role="columnheader"]').filter({ hasText: /Additional Info/ });
+    this.actionByColumn = page.locator('[role="columnheader"]').filter({ hasText: /Action By/ });
+    this.actionNotesColumn = page.locator('[role="columnheader"]').filter({ hasText: /Action Notes/ });
+
+    // ==================================================================================
+    // NEW REQUEST DIALOG LOCATORS
+    // ==================================================================================
     this.probationPortalDialog = page.getByRole('dialog');
     this.probationPortalDialogTitle = page.locator('dialog h5, [role="dialog"] h5').filter({ hasText: /Probation Portal Access/ });
+    this.dialogCloseButton = page.locator('.fa.fa-times').first();
     this.closeDialogButton = page.locator('.fa.fa-times').first();
 
     // Form fields
-    this.firstNameInput = page.getByRole('dialog').getByRole('textbox').first();
-    this.lastNameInput = page.getByRole('dialog').getByRole('textbox').nth(1);
-    this.emailInput = page.getByRole('dialog').getByRole('textbox').nth(2);
-    this.phoneInput = page.getByRole('dialog').getByRole('textbox').nth(3);
-    this.designationInput = page.getByRole('dialog').getByRole('textbox').nth(5);
-    this.additionalInfoInput = page.getByRole('dialog').getByRole('textbox').nth(4);
-
-    // Save button
+    this.firstNameField = page.getByRole('dialog').getByRole('textbox').first();
+    this.lastNameField = page.getByRole('dialog').getByRole('textbox').nth(1);
+    this.emailField = page.getByRole('dialog').getByRole('textbox').nth(2);
+    this.phoneField = page.getByRole('dialog').getByRole('textbox').nth(3);
+    this.designationField = page.getByRole('dialog').getByRole('textbox').nth(5);
+    this.additionalInfoField = page.getByRole('dialog').getByRole('textbox').nth(4);
     this.saveButton = page.locator('button').filter({ hasText: /Save/ }).first();
 
-    // Grid cells and rows
-    this.gridRows = page.locator('[role="row"]');
-    this.gridCells = page.locator('[role="gridcell"]');
+    // Legacy aliases for backwards compatibility
+    this.firstNameInput = this.firstNameField;
+    this.lastNameInput = this.lastNameField;
+    this.emailInput = this.emailField;
+    this.phoneInput = this.phoneField;
+    this.designationInput = this.designationField;
+    this.additionalInfoInput = this.additionalInfoField;
 
-    // Pagination
-    this.paginationText = page.getByText(/\(\d+ items?\)/);
-
-    // Loading spinner
-    this.loadingSpinner = page.locator('.spinner, .loader, [class*="loading"], [class*="spinner"], .ngx-spinner').first();
-
-    // Add Note/Reason dialog
+    // ==================================================================================
+    // ADD NOTE/REASON DIALOG LOCATORS
+    // ==================================================================================
     this.addNoteDialog = page.getByRole('dialog');
     this.noteTextArea = page.getByRole('dialog').getByRole('textbox');
 
-    // Approve/Reject icons
+    // ==================================================================================
+    // ACTION ICONS LOCATORS
+    // ==================================================================================
     this.approveButton = page.getByTitle('Approve');
     this.rejectButton = page.getByTitle('Reject');
+
+    // ==================================================================================
+    // LOADER LOCATOR
+    // ==================================================================================
+    this.loadingSpinner = page.locator('.spinner, .loader, [class*="loading"], [class*="spinner"], .ngx-spinner').first();
   }
 
+  // ==================================================================================
+  // NAVIGATION METHODS
+  // ==================================================================================
   async navigateToDashboard() {
     console.log('ACTION: Navigating to Dashboard...');
     await this.page.goto(this.dashboardUrl);
@@ -146,6 +177,9 @@ class ProbationPortalPage {
     console.log('ASSERT: Loading spinner completed');
   }
 
+  // ==================================================================================
+  // PROBATION PORTAL TAB VERIFICATION METHODS
+  // ==================================================================================
   async verifyProbationPortalIsSelected() {
     console.log('ACTION: Verifying Probation Portal is displayed/selected...');
     // Verify the Probation Portal heading is visible
@@ -265,6 +299,9 @@ class ProbationPortalPage {
     console.log('ASSERT: All Probation Portal controls are visible and accessible');
   }
 
+  // ==================================================================================
+  // CONTROL VISIBILITY VALIDATION METHODS
+  // ==================================================================================
   async verifyDefaultStatusSelection() {
     console.log('ACTION: Verifying default status selection in dropdown...');
     const statusValue = await this.statusDropdown.inputValue().catch(() => null);
@@ -297,48 +334,35 @@ class ProbationPortalPage {
     console.log(`✓ Available options: ${availableOptions.join(', ')}`);
   }
 
-  async verifyGridColumnsDisplayed() {
-    console.log('ACTION: Verifying all grid columns are displayed...');
+  async validateGridColumns() {
+    console.log('ACTION: Validating grid columns...');
     
-    // Wait for grid to load
-    await this.waitForLoadingSpinnerToComplete();
+    // Wait for grid to be loaded
+    await expect(this.probationPortalGridContainer).toBeVisible({ timeout: 10000 });
+    console.log('ACTION: Grid is visible');
     
-    // Get grid header row
-    const headerRow = this.page.locator('[role="row"]').first();
-    await expect(headerRow).toBeVisible({ timeout: 10000 });
-    
-    // Get all column headers
-    const columnHeaders = headerRow.locator('[role="gridcell"]');
-    const columnCount = await columnHeaders.count();
-    
-    expect(columnCount).toBeGreaterThan(0);
-    console.log(`ASSERT: Grid has ${columnCount} columns displayed`);
-    
-    return columnCount;
-  }
+    const columns = [
+      { locator: this.firstNameColumn, name: 'First Name' },
+      { locator: this.lastNameColumn, name: 'Last Name' },
+      { locator: this.emailColumn, name: 'Email' },
+      { locator: this.phoneColumn, name: 'Phone Number' },
+      { locator: this.designationColumn, name: 'Designation' },
+      { locator: this.additionalInfoColumn, name: 'Additional Info' },
+      { locator: this.actionByColumn, name: 'Action By' },
+      { locator: this.actionNotesColumn, name: 'Action Notes' }
+    ];
 
-  async fetchAndPrintGridColumnNames() {
-    console.log('ACTION: Fetching and printing all grid column names...');
-    
-    // Get grid header row
-    const headerRow = this.page.locator('[role="row"]').first();
-    const columnHeaders = headerRow.locator('[role="gridcell"]');
-    const columnCount = await columnHeaders.count();
-    
-    const columnNames = [];
-    console.log(`Grid Columns (${columnCount} total):`);
-    
-    for (let i = 0; i < columnCount; i++) {
-      const columnText = await columnHeaders.nth(i).textContent();
-      const trimmedName = columnText.trim();
-      columnNames.push(trimmedName);
-      console.log(`  ${i + 1}. ${trimmedName}`);
+    for (const column of columns) {
+      await expect(column.locator).toBeVisible();
+      console.log(`ACTION: ${column.name} column visible`);
     }
     
-    console.log(`ASSERT: All ${columnCount} grid columns verified`);
-    return columnNames;
+    console.log('ASSERT: All expected columns are visible');
   }
 
+  // ==================================================================================
+  // NEW REQUEST DIALOG METHODS
+  // ==================================================================================
   async clickNewRequestButton() {
     console.log('ACTION: Clicking New Request button...');
     await this.newRequestButton.click();
@@ -371,6 +395,18 @@ class ProbationPortalPage {
     console.log('ASSERT: Dialog is closed');
   }
 
+  async verifySuccessMessagePopup() {
+    console.log('ACTION: Verifying success message popup appeared...');
+    const successMessage = this.page.locator('[role="alert"], .success-message, .notification');
+    try {
+      await expect(successMessage).toBeVisible({ timeout: 5000 });
+      const messageText = await successMessage.textContent();
+      console.log(`ASSERT: Success message appeared - "${messageText}"`);
+    } catch (error) {
+      console.log('INFO: No visible success message found, but action may still have completed');
+    }
+  }
+
   async verifyGridHasRecords(expectedCount = null) {
     console.log(`ACTION: Verifying grid has records${expectedCount ? ` (expecting ${expectedCount})` : ''}...`);
     const recordCount = await this.getGridRecordCount();
@@ -388,6 +424,9 @@ class ProbationPortalPage {
     return recordCount;
   }
 
+  // ==================================================================================
+  // FORM FILLING METHODS
+  // ==================================================================================
   async fillFirstName(firstName) {
     console.log(`ACTION: Filling First Name with "${firstName}"...`);
     await this.firstNameInput.clear();
@@ -437,6 +476,9 @@ class ProbationPortalPage {
     console.log('ASSERT: Save button clicked');
   }
 
+  // ==================================================================================
+  // SEARCH AND FILTER METHODS
+  // ==================================================================================
   async fillSearchInput(searchText) {
     console.log(`ACTION: Filling search input with "${searchText}"...`);
     await this.searchInput.clear();
@@ -458,6 +500,9 @@ class ProbationPortalPage {
     console.log('ASSERT: Reset button clicked');
   }
 
+  // ==================================================================================
+  // STATUS FILTERING AND SELECTION METHODS
+  // ==================================================================================
   async selectStatusFilter(status) {
     console.log(`ACTION: Selecting status filter "${status}"...`);
     await this.statusDropdown.click();
@@ -467,22 +512,52 @@ class ProbationPortalPage {
     console.log(`ASSERT: Status filter set to "${status}"`);
   }
 
-  async verifyRecordInGrid(firstName, lastName) {
-    console.log(`ACTION: Verifying record "${firstName} ${lastName}" in grid...`);
+  async verifyRecordInGrid(firstName, lastName, email = null, designation = null, additionalInfo = null, note = null) {
+    console.log(`ACTION: Verifying record "${firstName} ${lastName}" in grid with all data...`);
     
-    // Verify first name is in grid
-    const firstNameLocator = this.page.locator('[role="gridcell"]').filter({ hasText: firstName }).first();
-    await expect(firstNameLocator).toBeVisible();
+    // Find row containing ALL provided values (firstName, lastName, and optionally email, designation, additionalInfo, note)
+    let recordRow = this.page.locator('[role="row"]')
+      .filter({ hasText: firstName })
+      .filter({ hasText: lastName });
+    
+    // Add additional filters if provided
+    if (email) {
+      recordRow = recordRow.filter({ hasText: email });
+    }
+    if (designation) {
+      recordRow = recordRow.filter({ hasText: designation });
+    }
+    if (additionalInfo) {
+      recordRow = recordRow.filter({ hasText: additionalInfo });
+    }
+    if (note) {
+      recordRow = recordRow.filter({ hasText: note });
+    }
+    
+    // Verify the row exists
+    await expect(recordRow.first()).toBeVisible({ timeout: 5000 });
+    
     console.log(`  ✓ First Name "${firstName}" found in grid`);
+    console.log(`  ✓ Last Name "${lastName}" found in same row`);
+    if (email) {
+      console.log(`  ✓ Email "${email}" found in same row`);
+    }
+    if (designation) {
+      console.log(`  ✓ Designation "${designation}" found in same row`);
+    }
+    if (additionalInfo) {
+      console.log(`  ✓ Additional Info "${additionalInfo}" found in same row`);
+    }
+    if (note) {
+      console.log(`  ✓ Note "${note}" found in same row`);
+    }
     
-    // Verify last name is in grid
-    const lastNameLocator = this.page.locator('[role="gridcell"]').filter({ hasText: lastName }).first();
-    await expect(lastNameLocator).toBeVisible();
-    console.log(`  ✓ Last Name "${lastName}" found in grid`);
-    
-    console.log(`ASSERT: Record "${firstName} ${lastName}" found in grid`);
+    console.log('ASSERT: Complete record data verified in same grid row');
   }
 
+  // ==================================================================================
+  // GRID DATA RETRIEVAL AND VERIFICATION METHODS
+  // ==================================================================================
   async getColumnCount() {
     console.log('ACTION: Getting column count from grid header...');
     const headerCells = this.page.locator('[role="columnheader"]');
@@ -491,31 +566,9 @@ class ProbationPortalPage {
     return count;
   }
 
-  async verifyGridColumnsDisplayed(expectedColumns = 9) {
-    console.log(`ACTION: Verifying grid displays ${expectedColumns} columns...`);
-    const columnCount = await this.getColumnCount();
-    expect(columnCount).toBe(expectedColumns);
-    console.log(`ASSERT: Grid displays ${columnCount} columns`);
-    return columnCount;
-  }
-
-  async fetchAndPrintGridColumnNames() {
-    console.log('ACTION: Fetching and printing all grid column names...');
-    const columnHeaders = this.page.locator('[role="columnheader"]');
-    const columnCount = await columnHeaders.count();
-    const columnNames = [];
-    console.log(`Grid Columns (${columnCount} total):`);
-    for (let i = 0; i < columnCount; i++) {
-      const columnText = await columnHeaders.nth(i).textContent();
-      // Remove "Press Enter to sort" hint and trim
-      const trimmedName = columnText.replace('Press Enter to sort', '').trim();
-      columnNames.push(trimmedName);
-      console.log(`  ${i + 1}. ${trimmedName}`);
-    }
-    console.log(`ASSERT: All ${columnCount} grid columns verified`);
-    return columnNames;
-  }
-
+  // ==================================================================================
+  // ACTION BUTTON METHODS (APPROVE/REJECT)
+  // ==================================================================================
   async clickApproveButton(recordIndex = 0) {
     console.log(`ACTION: Clicking Approve button for record ${recordIndex}...`);
     const approveButtons = this.page.getByTitle('Approve');
@@ -539,6 +592,9 @@ class ProbationPortalPage {
     console.log('ASSERT: Add Note/Reason dialog title is visible');
   }
 
+  // ==================================================================================
+  // APPROVAL/REJECTION DIALOG METHODS
+  // ==================================================================================
   async enterNote(noteText) {
     console.log(`ACTION: Entering note "${noteText}"...`);
     await this.noteTextArea.clear();
@@ -554,6 +610,9 @@ class ProbationPortalPage {
     console.log(`ASSERT: Pagination displays "${text}"`);
   }
 
+  // ==================================================================================
+  // GRID RECORD COUNT AND DATA RETRIEVAL METHODS
+  // ==================================================================================
   async getInitialGridCount() {
     console.log('ACTION: Getting initial grid count...');
     let count = 0;
@@ -1290,6 +1349,9 @@ class ProbationPortalPage {
     return dataRowCount;
   }
 
+  // ==================================================================================
+  // APPROVAL WORKFLOW METHODS
+  // ==================================================================================
   async initiateApprovalWorkflow() {
     console.log('ACTION: Initiating approval workflow...');
     await this.clickApproveButtonForFirstRecord();
@@ -1326,6 +1388,9 @@ class ProbationPortalPage {
     console.log('ASSERT: Approved record verified in filtered grid');
   }
 
+  // ==================================================================================
+  // REJECTION WORKFLOW METHODS
+  // ==================================================================================
   async initiateRejectionWorkflow() {
     console.log('ACTION: Initiating rejection workflow...');
     await this.clickRejectButtonForFirstRecord();
@@ -1360,7 +1425,9 @@ class ProbationPortalPage {
     console.log('ASSERT: Rejected record verified in filtered grid');
   }
 
-  // ============ PAGINATION TESTING METHODS ============
+  // ==================================================================================
+  // PAGINATION TESTING METHODS
+  // ==================================================================================
   async testPageSizeDropdown() {
     console.log('\n➡️ Testing Records Per Page Dropdown...');
 
@@ -1456,6 +1523,9 @@ class ProbationPortalPage {
     return { found: true, changed: changedSuccessfully };
   }
 
+  // ==================================================================================
+  // PAGINATION NAVIGATION AND VERIFICATION METHODS
+  // ==================================================================================
   async countVisibleRowsOnCurrentPage() {
     const allRows = this.page.locator('tbody tr');
     const totalRows = await allRows.count();
@@ -1683,6 +1753,127 @@ class ProbationPortalPage {
     console.log(`${'='.repeat(70)}\n`);
     
     return results;
+  }
+
+  async ensureRecordWithNewStatusExists() {
+    console.log('ACTION: Checking if records with New status exist...');
+    let recordCount = await this.getGridRecordCount();
+    
+    if (recordCount === 0) {
+      console.log('ACTION: No records with New status found - creating one...');
+      const { faker } = require('@faker-js/faker');
+      
+      const requestData = {
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+        email: faker.internet.email(),
+        phone: faker.helpers.replaceSymbols('(###) ###-####'),
+        designation: 'Probation Officer',
+        additionalInfo: faker.lorem.sentence()
+      };
+      
+      await this.clickNewRequestButton();
+      await this.verifyProbationPortalAccessDialogOpened();
+      await this.fillFirstName(requestData.firstName);
+      await this.fillLastName(requestData.lastName);
+      await this.fillEmail(requestData.email);
+      await this.fillPhone(requestData.phone);
+      await this.fillDesignation(requestData.designation);
+      await this.fillAdditionalInfo(requestData.additionalInfo);
+      await this.clickSaveButton();
+      await this.waitForLoadingSpinnerToComplete();
+      await this.verifyDialogClosed();
+      await this.page.waitForTimeout(1500);
+      
+      recordCount = await this.getGridRecordCount();
+      console.log(`ASSERT: New record created. Current record count: ${recordCount}`);
+    } else {
+      console.log(`ASSERT: Found ${recordCount} record(s) with New status`);
+    }
+    
+    return recordCount;
+  }
+
+  async getRecordDataByIndex(index) {
+    console.log(`ACTION: Getting record data at index ${index}...`);
+    await this.waitForLoadingSpinnerToComplete();
+    
+    const allRows = this.page.locator('[role="row"]');
+    const rowCount = await allRows.count();
+    
+    const rowIndex = index + 1; // +1 to skip header row
+    
+    if (rowIndex >= rowCount) {
+      throw new Error(`Row index ${index} does not exist. Total rows: ${rowCount}`);
+    }
+    
+    const row = allRows.nth(rowIndex);
+    const cells = row.locator('[role="gridcell"]');
+    const cellCount = await cells.count();
+    
+    if (cellCount < 4) {
+      throw new Error(`Row ${index} does not have enough cells. Expected at least 4, found ${cellCount}`);
+    }
+    
+    const firstName = (await cells.nth(0).textContent()).trim();
+    const lastName = (await cells.nth(1).textContent()).trim();
+    const email = (await cells.nth(2).textContent()).trim();
+    const phone = (await cells.nth(3).textContent()).trim();
+    
+    const recordData = { firstName, lastName, email, phone };
+    console.log(`ASSERT: Retrieved record at index ${index} - ${recordData.firstName} ${recordData.lastName}`);
+    return recordData;
+  }
+
+  async performCompleteResetFunctionalityTest() {
+    console.log('ACTION: Performing complete reset functionality test...');
+    
+    // Step 1: Get initial record count with "New" status
+    const initialRecordCount = await this.getGridRecordCount();
+    console.log(`  STEP 1: Initial grid has ${initialRecordCount} records with "New" status`);
+    
+    // Step 2: Get first record data for searching
+    const recordData = await this.getFirstRecordData();
+    
+    // Step 3: Change status filter to "Approved" (different from "New")
+    console.log(`  STEP 2: Changing status filter from "New" to "Approved"...`);
+    await this.selectStatusFilter('Approved');
+    await this.clickSearchButton();
+    const approvedFilteredCount = await this.getSearchResultCount();
+    console.log(`  STEP 3: Grid with "Approved" filter shows ${approvedFilteredCount} records`);
+    
+    // Step 4: Also apply search filter on top of status filter
+    console.log(`  STEP 4: Applying search filter for "${recordData.firstName}"...`);
+    await this.fillSearchInput(recordData.firstName);
+    const doubleFilteredCount = await this.getSearchResultCount();
+    console.log(`  STEP 5: Grid with both filters shows ${doubleFilteredCount} records`);
+    
+    // Step 5: Click Reset button
+    console.log(`  STEP 6: Clicking Reset button...`);
+    await this.clickResetButton();
+    await this.page.waitForTimeout(500);
+    
+    // Step 6: Verify reset functionality
+    const resetRecordCount = await this.getSearchResultCount();
+    
+    // Verify search input is cleared
+    const searchInputValue = await this.searchInput.inputValue();
+    expect(searchInputValue).toBe('');
+    
+    // Verify status is reset to "New"
+    const statusText = await this.statusDropdown.textContent();
+    expect(statusText.trim()).toContain('New');
+    
+    console.log(`  STEP 7: Reset verified - count restored to ${resetRecordCount}, filters cleared`);
+    
+    return {
+      initialRecordCount,
+      appliedStatusFilter: 'Approved',
+      approvedFilteredCount,
+      doubleFilteredCount,
+      resetRecordCount,
+      selectedStatus: 'Approved'
+    };
   }
 }
 

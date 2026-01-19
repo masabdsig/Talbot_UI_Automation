@@ -112,7 +112,15 @@ class PatientReferralPage {
     await this.page.waitForTimeout(300);
     await this.patientReferralThumbnail.click();
     await this.page.waitForTimeout(1000);
-    console.log('ASSERT: Patient Referral thumbnail clicked');
+    
+    // Wait for loader to disappear after clicking
+    console.log('ACTION: Waiting for loader to disappear...');
+    const loaders = this.page.locator('[class*="loader"], [class*="loading"], [class*="spinner"], .mat-progress-spinner, .spinner');
+    await loaders.first().waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {
+      console.log('DEBUG: No loader appeared or already hidden');
+    });
+    
+    console.log('ASSERT: Patient Referral thumbnail clicked and loader complete');
   }
 
   async verifyNavigationToPatientReferralSection() {
@@ -412,22 +420,20 @@ class PatientReferralPage {
   async verifyRecordSavedInGrid(clientData) {
     console.log('ACTION: Verifying new record appears in grid with all data...');
     
-    // Verify First Name
-    const gridFirstName = this.page.locator(`text=${clientData.firstName}`).first();
-    await expect(gridFirstName).toBeVisible({ timeout: 5000 });
+    // Find row containing ALL three values (firstName, lastName, email) in the same row
+    const recordRow = this.page.locator('[role="row"]')
+      .filter({ hasText: clientData.firstName })
+      .filter({ hasText: clientData.lastName })
+      .filter({ hasText: clientData.email });
+    
+    // Verify the row exists
+    await expect(recordRow.first()).toBeVisible({ timeout: 5000 });
+    
     console.log(`  ✓ Client First Name "${clientData.firstName}" found in grid`);
+    console.log(`  ✓ Client Last Name "${clientData.lastName}" found in same row`);
+    console.log(`  ✓ Client Email "${clientData.email}" found in same row`);
     
-    // Verify Last Name
-    const gridLastName = this.page.locator(`text=${clientData.lastName}`).first();
-    await expect(gridLastName).toBeVisible({ timeout: 5000 });
-    console.log(`  ✓ Client Last Name "${clientData.lastName}" found in grid`);
-    
-    // Verify Email
-    const gridEmail = this.page.locator(`text=${clientData.email}`).first();
-    await expect(gridEmail).toBeVisible({ timeout: 5000 });
-    console.log(`  ✓ Client Email "${clientData.email}" found in grid`);
-    
-    console.log('ASSERT: Complete record data verified in grid');
+    console.log('ASSERT: Complete record data verified in same grid row');
   }
 
   async getNewStatusRecordCount() {
@@ -541,7 +547,15 @@ class PatientReferralPage {
     console.log('ACTION: Clicking Search button...');
     await this.searchButton.click();
     await this.page.waitForTimeout(500);
-    console.log('ASSERT: Search button clicked');
+    
+    // Wait for loader to disappear after clicking search
+    console.log('ACTION: Waiting for loader to disappear...');
+    const loaders = this.page.locator('[class*="loader"], [class*="loading"], [class*="spinner"], .mat-progress-spinner, .spinner');
+    await loaders.first().waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {
+      console.log('DEBUG: No loader appeared or already hidden');
+    });
+    
+    console.log('ASSERT: Search button clicked and loader complete');
   }
 
   async clickResetButton() {
@@ -640,8 +654,9 @@ class PatientReferralPage {
     return rowsData;
   }
 
-  async getCompleteFirstRecordData() {
-    console.log('ACTION: Getting COMPLETE first record data from grid (ALL columns)...');
+
+  async getRecordDataByIndex(index) {
+    console.log(`ACTION: Getting COMPLETE record data at index ${index}...`);
     
     // Wait for grid to be visible
     await expect(this.patientReferralGrid).toBeVisible({ timeout: 10000 });
@@ -651,14 +666,21 @@ class PatientReferralPage {
     const dataRowgroup = this.page.locator('ejs-grid [role="rowgroup"]').last();
     await dataRowgroup.waitFor({ state: 'visible', timeout: 5000 });
     
-    const firstDataRow = dataRowgroup.locator('[role="row"]').first();
-    await firstDataRow.waitFor({ state: 'visible', timeout: 5000 });
+    const gridRows = dataRowgroup.locator('[role="row"]');
+    const totalRows = await gridRows.count();
     
-    // Get all cells in the first row
-    const cells = firstDataRow.locator('[role="gridcell"]');
+    if (index >= totalRows) {
+      throw new Error(`Record index ${index} is out of bounds. Total rows: ${totalRows}`);
+    }
+    
+    const recordRow = gridRows.nth(index);
+    await recordRow.waitFor({ state: 'visible', timeout: 5000 });
+    
+    // Get all cells in the row
+    const cells = recordRow.locator('[role="gridcell"]');
     const cellCount = await cells.count();
     
-    console.log(`DEBUG: Found ${cellCount} cells in first row`);
+    console.log(`DEBUG: Found ${cellCount} cells in row at index ${index}`);
     
     // Store ALL cell data from the record
     // Grid columns: First Name, Last Name, Email, Phone, Reason, Ref Provider, Provider Email, Provider Phone, Action By, Action Notes
@@ -675,13 +697,7 @@ class PatientReferralPage {
       actionNotes: (await cells.nth(9).textContent({ timeout: 5000 }).catch(() => '')) || '',
     };
     
-    console.log(`ASSERT: Retrieved COMPLETE first record data:`);
-    console.log(`  - Name: ${recordData.firstName.trim()} ${recordData.lastName.trim()}`);
-    console.log(`  - Email: ${recordData.email.trim()}`);
-    console.log(`  - Phone: ${recordData.phone.trim()}`);
-    console.log(`  - Reason: ${recordData.reason.trim().substring(0, 50)}${recordData.reason.trim().length > 50 ? '...' : ''}`);
-    console.log(`  - Ref Provider: ${recordData.refProvider.trim()}`);
-    
+    console.log(`ASSERT: Retrieved record at index ${index}: ${recordData.firstName.trim()} ${recordData.lastName.trim()}`);
     return recordData;
   }
 
@@ -741,6 +757,164 @@ class PatientReferralPage {
 
     console.log(`ASSERT: Status "${status}" selected from dropdown`);
     return true;
+  }
+
+  // ==================================================================================
+  // SEARCH VERIFICATION METHODS
+  // ==================================================================================
+  async verifyFirstNameInGrid(firstName) {
+    console.log(`ACTION: Verifying First Name "${firstName}" exists in filtered grid...`);
+    
+    // Wait for grid to be visible
+    await expect(this.patientReferralGrid).toBeVisible({ timeout: 10000 });
+    await this.page.waitForTimeout(500);
+    
+    // Get data rows from the last rowgroup
+    const dataRowgroup = this.page.locator('ejs-grid [role="rowgroup"]').last();
+    await dataRowgroup.waitFor({ state: 'visible', timeout: 5000 });
+    
+    const gridRows = dataRowgroup.locator('[role="row"]');
+    const rowCount = await gridRows.count();
+    
+    let foundRecord = false;
+    
+    for (let i = 0; i < rowCount; i++) {
+      const row = gridRows.nth(i);
+      const cells = row.locator('[role="gridcell"]');
+      const cellCount = await cells.count();
+      
+      if (cellCount > 0) {
+        const firstNameCell = await cells.nth(0).textContent();
+        if (firstNameCell.includes(firstName)) {
+          foundRecord = true;
+          break;
+        }
+      }
+    }
+    
+    await expect(foundRecord).toBe(true);
+    console.log(`ASSERT: First Name "${firstName}" found in filtered grid`);
+  }
+
+  async verifyLastNameInGrid(lastName) {
+    console.log(`ACTION: Verifying Last Name "${lastName}" exists in filtered grid...`);
+    
+    // Wait for grid to be visible
+    await expect(this.patientReferralGrid).toBeVisible({ timeout: 10000 });
+    await this.page.waitForTimeout(500);
+    
+    // Get data rows from the last rowgroup
+    const dataRowgroup = this.page.locator('ejs-grid [role="rowgroup"]').last();
+    await dataRowgroup.waitFor({ state: 'visible', timeout: 5000 });
+    
+    const gridRows = dataRowgroup.locator('[role="row"]');
+    const rowCount = await gridRows.count();
+    
+    let foundRecord = false;
+    
+    for (let i = 0; i < rowCount; i++) {
+      const row = gridRows.nth(i);
+      const cells = row.locator('[role="gridcell"]');
+      const cellCount = await cells.count();
+      
+      if (cellCount > 1) {
+        const lastNameCell = await cells.nth(1).textContent();
+        if (lastNameCell.includes(lastName)) {
+          foundRecord = true;
+          break;
+        }
+      }
+    }
+    
+    await expect(foundRecord).toBe(true);
+    console.log(`ASSERT: Last Name "${lastName}" found in filtered grid`);
+  }
+
+  async verifyRecordInGrid(firstName, lastName, note = null) {
+    console.log(`ACTION: Verifying record "${firstName} ${lastName}" in same grid row...`);
+    
+    // Build locator that finds row containing ALL criteria
+    let rowLocator = this.page.locator('[role="row"]')
+      .filter({ hasText: firstName })
+      .filter({ hasText: lastName });
+    
+    if (note) {
+      rowLocator = rowLocator.filter({ hasText: note });
+    }
+    
+    // Verify the row exists
+    await expect(rowLocator.first()).toBeVisible({ timeout: 5000 });
+    
+    console.log(`  ✓ First Name "${firstName}" found in grid`);
+    console.log(`  ✓ Last Name "${lastName}" found in same row`);
+    if (note) {
+      console.log(`  ✓ Note "${note}" found in same row`);
+    }
+    
+    console.log(`ASSERT: Record "${firstName} ${lastName}" with all fields found in same grid row`);
+  }
+
+  // ==================================================================================
+  // STATUS FILTER HELPER METHODS
+  // ==================================================================================
+  async storeInitialRecords(recordCount = 3) {
+    console.log(`ACTION: Storing first ${recordCount} records from current grid state...`);
+    
+    const records = await this.getMultipleGridRows(recordCount);
+    console.log(`ASSERT: Stored ${records.length} record(s) for filter comparison`);
+    
+    return records;
+  }
+
+  async verifyStatusFilterChangesGrid(status, initialRecords) {
+    console.log(`\n  ACTION: Testing status filter: "${status}"`);
+    await this.selectStatusFromDropdown(status);
+    await this.page.waitForTimeout(500);
+    await this.clickSearchButton();
+    
+    const filteredCount = await this.getGridRecordCountAfterSearch();
+    console.log(`  Filtered records for status "${status}": ${filteredCount}`);
+
+    if (filteredCount > 0) {
+      console.log(`  Verifying that stored initial records are NOT in filtered results...`);
+      let foundInitialRecords = 0;
+
+      for (let i = 0; i < initialRecords.length; i++) {
+        const record = initialRecords[i];
+        try {
+          await this.verifyRecordInGrid(record.firstName, record.lastName);
+          console.log(`    ❌ ERROR: Initial record ${i + 1} "${record.firstName} ${record.lastName}" still found in filtered grid!`);
+          foundInitialRecords++;
+        } catch (error) {
+          console.log(`    ✓ Initial record ${i + 1} "${record.firstName} ${record.lastName}" correctly NOT found in filtered grid`);
+        }
+      }
+
+      // Test should FAIL ONLY if ALL initial records are found (means filter didn't work at all)
+      if (foundInitialRecords === initialRecords.length) {
+        throw new Error(`❌ FILTER VALIDATION FAILED: ALL ${initialRecords.length} initial records were found in filtered grid. The status filter "${status}" did not change the displayed records at all.`);
+      }
+      
+      console.log(`  ✓ Status filter "${status}" correctly changed grid records (${initialRecords.length - foundInitialRecords} records properly filtered out)`);
+    }
+
+    console.log(`  Resetting filter after testing status "${status}"...`);
+    await this.clickResetButton();
+    await this.page.waitForTimeout(500);
+  }
+
+  async verifyRecordsRestoredAfterReset(initialRecords) {
+    console.log(`\n  ACTION: Verifying that initial grid records are restored after reset...`);
+    console.log(`  Verifying all ${initialRecords.length} stored records are back in grid...`);
+    
+    for (let i = 0; i < initialRecords.length; i++) {
+      const record = initialRecords[i];
+      console.log(`    Verifying record ${i + 1}: "${record.firstName} ${record.lastName}"...`);
+      await this.verifyRecordInGrid(record.firstName, record.lastName);
+      console.log(`    ✓ Record ${i + 1} "${record.firstName} ${record.lastName}" found in grid after reset`);
+    }
+    
+    console.log(`  ✓ All ${initialRecords.length} initial records successfully restored`);
   }
 
   // ==================================================================================
@@ -1389,19 +1563,6 @@ class PatientReferralPage {
   // APPROVAL DIALOG METHODS FOR TC11 REFACTORING
   // ==================================================================================
 
-  async setupApprovalWorkflowTest(loginPage) {
-    await this.navigateToPatientReferralTab(loginPage);
-    await this.clickPatientReferralThumbnail();
-    await this.verifyNavigationToPatientReferralSection();
-
-    const recordCount = await this.getGridRecordCount();
-    
-    return {
-      skipped: recordCount === 0,
-      reason: 'No records available'
-    };
-  }
-
   async getFirstRecordNameOnly() {
     console.log('ACTION: Getting first record name...');
     const firstRow = this.page.locator('ejs-grid [role="row"][data-uid]').first();
@@ -1485,45 +1646,30 @@ class PatientReferralPage {
     };
   }
 
-  async findRecordByNameInGridAndExtractMinimal(firstName, lastName) {
-    console.log('ACTION: Finding record by name...');
-    
-    const gridRows = this.page.locator('ejs-grid [role="row"][data-uid]');
-    const rowCount = await gridRows.count();
-    
-    for (let i = 0; i < rowCount; i++) {
-      const row = gridRows.nth(i);
-      const cells = row.locator('[role="gridcell"]');
-      const cellCount = await cells.count();
-      
-      if (cellCount >= 2) {
-        const firstNameCell = await cells.nth(0).textContent();
-        const lastNameCell = await cells.nth(1).textContent();
-        
-        if (firstNameCell.trim() === firstName && lastNameCell.trim() === lastName) {
-          return await this.extractRecordDataMinimal(row);
-        }
-      }
-    }
-    
-    throw new Error('Record not found: ' + firstName + ' ' + lastName);
-  }
-
   async verifyRecordInFilteredGrid(recordNameBefore, selectedStatus, uniqueSentence) {
-    console.log('ACTION: Verifying record in filtered grid...');
+    console.log('ACTION: Verifying record in filtered grid with status and notes...');
     
+    console.log(`  ACTION: Applying status filter "${selectedStatus}"...`);
     await this.selectStatusFromDropdown(selectedStatus);
     await this.clickSearchButton();
     await this.page.waitForTimeout(1000);
     
-    const recordData = await this.findRecordByNameInGridAndExtractMinimal(recordNameBefore.firstName, recordNameBefore.lastName);
+    console.log(`  ACTION: Verifying record "${recordNameBefore.firstName} ${recordNameBefore.lastName}" exists in same row with note...`);
     
-    expect(recordData.firstName.trim()).toBe(recordNameBefore.firstName);
-    expect(recordData.lastName.trim()).toBe(recordNameBefore.lastName);
-    expect(recordData.actionNotes.trim()).toContain(uniqueSentence);
+    // Build locator that finds row containing ALL criteria: firstName, lastName, AND uniqueSentence (notes)
+    let rowLocator = this.page.locator('[role="row"]')
+      .filter({ hasText: recordNameBefore.firstName })
+      .filter({ hasText: recordNameBefore.lastName })
+      .filter({ hasText: uniqueSentence });
     
-    console.log('  ✓ Name: ' + recordData.firstName.trim() + ' ' + recordData.lastName.trim());
-    console.log('  ✓ Note: ' + uniqueSentence);
+    // Verify the row exists
+    await expect(rowLocator.first()).toBeVisible({ timeout: 5000 });
+    
+    console.log(`  ✓ First Name "${recordNameBefore.firstName}" found in filtered grid`);
+    console.log(`  ✓ Last Name "${recordNameBefore.lastName}" found in same row`);
+    console.log(`  ✓ Note "${uniqueSentence}" found in same row`);
+    
+    console.log(`ASSERT: Record "${recordNameBefore.firstName} ${recordNameBefore.lastName}" verified in filtered grid with status "${selectedStatus}" and notes`);
   }
 
   async clickApproveAndOpenDialog() {
@@ -1720,6 +1866,105 @@ class PatientReferralPage {
     console.log(`  ✓ Name: ${recordDataAfter.firstName.trim()} ${recordDataAfter.lastName.trim()}`);
     console.log(`  ✓ Note contains faker: "${expectedActionNotes}"`);
     console.log(`SUCCESS: Record verified in "${selectedStatus}" filtered grid`);
+  }
+
+  // ==================================================================================
+  // REJECTION WORKFLOW METHODS (SPECIFIC TO REJECT)
+  // ==================================================================================
+  async clickRejectAndOpenDialog() {
+    console.log('ACTION: Clicking Reject icon for first record...');
+    const firstRejectIcon = this.rejectIcon.first();
+    await expect(firstRejectIcon).toBeVisible({ timeout: 5000 });
+    await firstRejectIcon.click();
+    await this.page.waitForTimeout(1000);
+
+    const dialog = this.page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 10000 });
+    
+    return dialog;
+  }
+
+  async reopenRejectDialog() {
+    console.log('ACTION: Reopening reject dialog...');
+    const firstRejectIcon = this.rejectIcon.first();
+    await expect(firstRejectIcon).toBeVisible({ timeout: 5000 });
+    await firstRejectIcon.click();
+    await this.page.waitForTimeout(1000);
+
+    const dialog = this.page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 10000 });
+    console.log('✓ Dialog reopened successfully');
+  }
+
+  async verifyRecordInRejectedGrid(recordNameBefore, uniqueSentence) {
+    console.log('ACTION: Verifying record in rejected grid with status and notes...');
+    
+    console.log(`  ACTION: Applying status filter "Rejected"...`);
+    await this.selectStatusFromDropdown('Rejected');
+    await this.clickSearchButton();
+    await this.page.waitForTimeout(1000);
+    
+    console.log(`  ACTION: Verifying record "${recordNameBefore.firstName} ${recordNameBefore.lastName}" exists in same row with note...`);
+    
+    // Build locator that finds row containing ALL criteria: firstName, lastName, AND uniqueSentence (notes)
+    let rowLocator = this.page.locator('[role="row"]')
+      .filter({ hasText: recordNameBefore.firstName })
+      .filter({ hasText: recordNameBefore.lastName })
+      .filter({ hasText: uniqueSentence });
+    
+    // Verify the row exists
+    await expect(rowLocator.first()).toBeVisible({ timeout: 5000 });
+    
+    console.log(`  ✓ First Name "${recordNameBefore.firstName}" found in rejected grid`);
+    console.log(`  ✓ Last Name "${recordNameBefore.lastName}" found in same row`);
+    console.log(`  ✓ Note "${uniqueSentence}" found in same row`);
+    
+    console.log(`ASSERT: Record "${recordNameBefore.firstName} ${recordNameBefore.lastName}" verified in rejected grid with notes`);
+  }
+
+  // ==================================================================================
+  // UTILITY METHODS
+  // ==================================================================================
+  async ensureRecordWithNewStatusExists() {
+    console.log('ACTION: Checking if records with New status exist...');
+    let recordCount = await this.getGridRecordCount();
+    
+    if (recordCount === 0) {
+      console.log('ACTION: No records with New status found - creating one...');
+      const { faker } = require('@faker-js/faker');
+      
+      const clientData = {
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+        email: faker.internet.email(),
+        phone: faker.phone.number('##########')
+      };
+
+      const providerData = {
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+        email: faker.internet.email(),
+        phone: faker.phone.number('##########')
+      };
+
+      const notes = faker.lorem.sentence();
+      
+      await this.clickNewRequestButton();
+      await this.verifyDialogVisible();
+      await this.fillClientInformation(clientData);
+      await this.fillProviderInformation(providerData);
+      await this.fillAdditionalNotes(notes);
+      await this.clickSaveButton();
+      await this.verifyDialogClosed();
+      await this.page.waitForTimeout(1500);
+      
+      recordCount = await this.getGridRecordCount();
+      console.log(`ASSERT: New referral record created. Current record count: ${recordCount}`);
+    } else {
+      console.log(`ASSERT: Found ${recordCount} record(s) with New status`);
+    }
+    
+    return recordCount;
   }
 }
 

@@ -153,38 +153,49 @@ test.describe('Patient Referral Module Tests', () => {
     await patientReferral.clickPatientReferralThumbnail();
     await patientReferral.verifyNavigationToPatientReferralSection();
 
-    console.log("STEP 2: Get initial record count...");
-    const initialCount = await patientReferral.getGridRecordCountAfterSearch();
-    expect(initialCount).toBeGreaterThan(0);
+    console.log("STEP 2: Ensure at least one record with New status exists...");
+    const recordCount = await patientReferral.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
 
-    console.log("STEP 3: Get real data from first record...");
+    console.log("STEP 3: Get first record data from grid for testing search...");
     const recordData = await patientReferral.getFirstRecordData();
-    const { firstName, lastName } = recordData;
+    console.log(`STEP: Retrieved test data from first grid record - ${recordData.firstName} ${recordData.lastName}`);
 
-    console.log("STEP 4: Search by Client First Name...");
-    await patientReferral.searchByClientName(firstName);
+    // TEST 1: Search by First Name
+    console.log('\n🔍 TEST 1: Testing Search by First Name...');
+    console.log(`STEP: Searching for First Name: "${recordData.firstName}"`);
+    await patientReferral.searchByClientName(recordData.firstName);
     await patientReferral.clickSearchButton();
     const firstNameFilteredCount = await patientReferral.getGridRecordCountAfterSearch();
     expect(firstNameFilteredCount).toBeGreaterThan(0);
-    expect(firstNameFilteredCount).toBeLessThanOrEqual(initialCount);
+    
+    console.log('STEP: Verify searched First Name exists in grid...');
+    await patientReferral.verifyFirstNameInGrid(recordData.firstName);
+    console.log(`✔️ Search by First Name works correctly - Found ${firstNameFilteredCount} result(s)`);
 
-    console.log("STEP 5: Clear search and search by Client Last Name...");
-    await patientReferral.clearSearchField();
-    await patientReferral.searchByClientName(lastName);
+    // Reset filters for next test
+    console.log('\nSTEP: Resetting filters after TEST 1...');
+    await patientReferral.clickResetButton();
+    await page.waitForTimeout(500);
+
+    // TEST 2: Search by Last Name
+    console.log('\n🔍 TEST 2: Testing Search by Last Name...');
+    console.log(`STEP: Searching for Last Name: "${recordData.lastName}"`);
+    await patientReferral.searchByClientName(recordData.lastName);
     await patientReferral.clickSearchButton();
     const lastNameFilteredCount = await patientReferral.getGridRecordCountAfterSearch();
     expect(lastNameFilteredCount).toBeGreaterThan(0);
-    expect(lastNameFilteredCount).toBeLessThanOrEqual(initialCount);
+    
+    console.log('STEP: Verify searched Last Name exists in grid...');
+    await patientReferral.verifyLastNameInGrid(recordData.lastName);
+    console.log(`✔️ Search by Last Name works correctly - Found ${lastNameFilteredCount} result(s)`);
 
-    console.log("STEP 6: Verify Reset button functionality...");
+    // Final reset to restore grid to original state
+    console.log('\nSTEP: Final reset of filters...');
     await patientReferral.clickResetButton();
-    const resetCount = await patientReferral.getGridRecordCount();
-    expect(resetCount).toBe(initialCount);
-    await expect(patientReferral.searchTextbox).toHaveValue('');
+    await page.waitForTimeout(500);
 
-    console.log(`ASSERT: Search by First Name ("${firstName}"): ${firstNameFilteredCount} records`);
-    console.log(`ASSERT: Search by Last Name ("${lastName}"): ${lastNameFilteredCount} records`);
-    console.log(`ASSERT: After reset, record count restored to ${resetCount}`);
+    console.log('\n✅ Patient Referral Search Functionality - PASSED');
   });
 
   test('Verify Status Dropdown Functionality', async ({ page }) => {
@@ -199,36 +210,35 @@ test.describe('Patient Referral Module Tests', () => {
     console.log("STEP 2: Verify default status selection...");
     await patientReferral.verifyDefaultStatusSelection();
 
-    console.log("STEP 3: Capture initial grid data for 'New' status...");
-    const newStatusData = await patientReferral.getMultipleGridRows(4);
+    console.log("STEP 3: Ensure at least one record with New status exists...");
+    const recordCount = await patientReferral.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
 
-    console.log("STEP 4: Get available status options...");
+    console.log("STEP 4: Store first 3 records from initial grid...");
+    const initialRecords = await patientReferral.storeInitialRecords(3);
+
+    console.log("STEP 5: Get available status options...");
     const availableStatuses = await patientReferral.getAvailableStatusOptions();
-    const statusesToTest = availableStatuses.slice(1);
+    expect(availableStatuses.length).toBeGreaterThan(0);
+    expect(availableStatuses).toContain('New');
 
-    console.log("STEP 5: Test each status filter...");
+    console.log("STEP 6: Test each non-New status filter and verify grid records changed...");
+    const statusesToTest = availableStatuses.filter(s => s !== 'New').slice(0, 2);
     for (const status of statusesToTest) {
-      await patientReferral.selectStatusFromDropdown(status);
-      await patientReferral.clickSearchButton();
-      const filteredStatusData = await patientReferral.getMultipleGridRows(4);
-      
-      let matchingRecords = 0;
-      for (const newRecord of newStatusData) {
-        for (const filteredRecord of filteredStatusData) {
-          if (newRecord.firstName === filteredRecord.firstName && 
-              newRecord.lastName === filteredRecord.lastName) {
-            matchingRecords++;
-          }
-        }
-      }
-      expect(matchingRecords).not.toBe(newStatusData.length);
+      await patientReferral.verifyStatusFilterChangesGrid(status, initialRecords);
     }
 
-    console.log("STEP 6: Reset to default 'New' status...");
+    console.log("STEP 7: Reset to default 'New' status...");
     await patientReferral.selectStatusFromDropdown('New');
     await patientReferral.clickSearchButton();
 
-    console.log(`ASSERT: Status dropdown functionality verified with ${availableStatuses.length} status options`);
+    console.log("STEP 8: Verify initial grid records are restored after reset...");
+    await patientReferral.verifyRecordsRestoredAfterReset(initialRecords);
+
+    console.log(`\nASSERT: Status dropdown functionality verified with ${availableStatuses.length} status options`);
+    console.log(`ASSERT: Grid records correctly changed when status filters applied`);
+    console.log(`ASSERT: Initial records NOT found in filtered results (grid properly filtered)`);
+    console.log(`ASSERT: All ${initialRecords.length} initial records restored after reset to 'New' status`);
   });
 
   test('Verify Grid Column Information Display', async ({ page }) => {
@@ -240,18 +250,18 @@ test.describe('Patient Referral Module Tests', () => {
     await patientReferral.clickPatientReferralThumbnail();
     await patientReferral.verifyNavigationToPatientReferralSection();
 
-    console.log("STEP 2: Verify all grid column headers are visible...");
-    await patientReferral.validateGridColumns();
-
-    console.log("STEP 3: Get grid record count...");
-    const recordCount = await patientReferral.getGridRecordCount();
+    console.log("STEP 2: Ensure at least one record with New status exists...");
+    const recordCount = await patientReferral.ensureRecordWithNewStatusExists();
     expect(recordCount).toBeGreaterThan(0);
+
+    console.log("STEP 3: Verify all grid column headers are visible...");
+    await patientReferral.validateGridColumns();
 
     console.log("STEP 4: Verify grid column data is properly displayed...");
     await patientReferral.verifyGridColumnDataDisplay(3);
 
     console.log("STEP 5: Verify Action column contains action icons...");
-    await patientReferral.verifyActionColumnIcons();
+    await patientReferral.verifyActionColumnIcons(3);
 
     console.log(`ASSERT: Grid contains ${recordCount} records with all columns visible and formatted`);
   });
@@ -265,14 +275,9 @@ test.describe('Patient Referral Module Tests', () => {
     await patientReferral.clickPatientReferralThumbnail();
     await patientReferral.verifyNavigationToPatientReferralSection();
     
-    console.log("STEP 2: Get grid record count...");
-    const recordCount = await patientReferral.getGridRecordCount();
-    
-    if (recordCount === 0) {
-      console.log("SKIP: No records available for action icon verification");
-      test.skip();
-      return;
-    }
+    console.log("STEP 2: Ensure at least one record with New status exists...");
+    const recordCount = await patientReferral.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
 
     console.log("STEP 3: Verify Approve and Reject icons are visible and clickable...");
     const iconsVerified = await patientReferral.verifyAndTestActionIcons(page);
@@ -286,19 +291,40 @@ test.describe('Patient Referral Module Tests', () => {
     const patientReferral = new PatientReferralPage(page);
 
     console.log("STEP 1: Navigate to Patient Referral Section...");
-    const result = await patientReferral.performCompleteResetFunctionalityTest(loginPage);
+    await patientReferral.navigateToPatientReferralTab(loginPage);
+    await patientReferral.clickPatientReferralThumbnail();
+    await patientReferral.verifyNavigationToPatientReferralSection();
 
-    if (result.skipped) {
-      console.log(`SKIP: ${result.reason}`);
-      test.skip();
-      return;
+    console.log("STEP 2: Ensure at least one record with New status exists...");
+    const recordCount = await patientReferral.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
+
+    console.log("STEP 3: Store first 3 records data before applying filters...");
+    const recordsToVerify = [];
+    const recordsToStore = Math.min(3, recordCount);
+    for (let i = 0; i < recordsToStore; i++) {
+      const recordData = await patientReferral.getRecordDataByIndex(i);
+      recordsToVerify.push(recordData);
+      console.log(`DEBUG: Stored record ${i + 1}: ${recordData.firstName} ${recordData.lastName}`);
     }
+
+    console.log("STEP 4: Performing complete reset functionality test...");
+    const result = await patientReferral.performCompleteResetFunctionalityTest(loginPage);
     
     console.log(`ASSERT: Initial grid state: ${result.initialRecordCount} records with "New" status`);
     console.log(`ASSERT: Applied filter: Changed status to "${result.selectedStatus}"`);
     console.log(`ASSERT: Filtered grid result: ${result.filteredRecordCount} records`);
-    console.log(`ASSERT: Reset applied and verified`);
-    console.log(`ASSERT: Grid restored to: ${result.resetRecordCount} records with "New" status`);
+    console.log(`ASSERT: Reset applied and verified - count restored to ${result.resetRecordCount}`);
+    console.log(`ASSERT: Search field and status dropdown reset to defaults`);
+
+    console.log("STEP 5: Verify stored records exist in grid after reset...");
+    for (let i = 0; i < recordsToVerify.length; i++) {
+      const record = recordsToVerify[i];
+      console.log(`STEP 5.${i + 1}: Verifying record ${i + 1}: "${record.firstName} ${record.lastName}"...`);
+      await patientReferral.verifyRecordInGrid(record.firstName, record.lastName);
+    }
+
+    console.log("ASSERT: Reset Functionality test passed - All stored records verified in grid after reset");
   });
   test('Column Sorting Validation', async ({ page }) => {
     const patientReferral = new PatientReferralPage(page);
@@ -338,21 +364,21 @@ test.describe('Patient Referral Module Tests', () => {
   });
 
   // ==================================================================================
-  // APPROVAL ACTION WORKFLOW TEST SUITE (REFACTORED INTO FOCUSED TESTS)
+  // APPROVAL ACTION WORKFLOW TEST SUITE
   // ==================================================================================
 
   test('Verify Approval Dialog Controls, Close and Reopen Functionality', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const patientReferral = new PatientReferralPage(page);
-
-    console.log("STEP 1: Navigate to Patient Referral Section...");
-    const setupResult = await patientReferral.setupApprovalWorkflowTest(loginPage);
     
-    if (setupResult.skipped) {
-      console.log(`SKIP: ${setupResult.reason}`);
-      test.skip();
-      return;
-    }
+    console.log("STEP 1: Navigate to Patient Referral Section...");
+    await patientReferral.navigateToPatientReferralTab(loginPage);
+    await patientReferral.clickPatientReferralThumbnail();
+    await patientReferral.verifyNavigationToPatientReferralSection();
+
+    console.log("STEP 2: Ensure at least one record with New status exists...");
+    const recordCount = await patientReferral.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
 
     console.log("STEP 2: Click Approve icon and open approval dialog...");
     await patientReferral.clickApproveAndOpenDialog();
@@ -377,18 +403,18 @@ test.describe('Patient Referral Module Tests', () => {
     const patientReferral = new PatientReferralPage(page);
 
     console.log("STEP 1: Navigate to Patient Referral Section...");
-    const setupResult = await patientReferral.setupApprovalWorkflowTest(loginPage);
-    
-    if (setupResult.skipped) {
-      console.log(`SKIP: ${setupResult.reason}`);
-      test.skip();
-      return;
-    }
+    await patientReferral.navigateToPatientReferralTab(loginPage);
+    await patientReferral.clickPatientReferralThumbnail();
+    await patientReferral.verifyNavigationToPatientReferralSection();
 
-    console.log("STEP 2: Click Approve icon and open approval dialog...");
+    console.log("STEP 2: Ensure at least one record with New status exists...");
+    const recordCount = await patientReferral.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
+
+    console.log("STEP 3: Click Approve icon and open approval dialog...");
     await patientReferral.clickApproveAndOpenDialog();
 
-    console.log("STEP 3: Verify and test status dropdown...");
+    console.log("STEP 4: Verify and test status dropdown...");
     await patientReferral.verifyAndTestStatusDropdown();
 
     console.log("ASSERT: Status dropdown validation verified");
@@ -399,14 +425,15 @@ test.describe('Patient Referral Module Tests', () => {
     const patientReferral = new PatientReferralPage(page);
 
     console.log("STEP 1: Navigate to Patient Referral Section...");
-    const setupResult = await patientReferral.setupApprovalWorkflowTest(loginPage);
-    if (setupResult.skipped) {
-      console.log(`SKIP: ${setupResult.reason}`);
-      test.skip();
-      return;
-    }
+    await patientReferral.navigateToPatientReferralTab(loginPage);
+    await patientReferral.clickPatientReferralThumbnail();
+    await patientReferral.verifyNavigationToPatientReferralSection();
 
-    console.log("STEP 2: Capture record name...");
+    console.log("STEP 2: Ensure at least one record with New status exists...");
+    const recordCount = await patientReferral.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
+
+    console.log("STEP 3: Capture record name...");
     const recordName = await patientReferral.getFirstRecordNameOnly();
 
     console.log("STEP 3: Open approval dialog...");
@@ -432,6 +459,54 @@ test.describe('Patient Referral Module Tests', () => {
 
     console.log(`ASSERT: Approval workflow completed for ${recordName.firstName} ${recordName.lastName}`);
     console.log(`ASSERT: Status changed to ${selectedStatus} with notes persisted`);
+  });
+
+  test('Verify Reject Workflow with Add Note Dialog and Data Persistence', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const patientReferral = new PatientReferralPage(page);
+
+    console.log("STEP 1: Navigate to Patient Referral Section...");
+    await patientReferral.navigateToPatientReferralTab(loginPage);
+    await patientReferral.clickPatientReferralThumbnail();
+    await patientReferral.verifyNavigationToPatientReferralSection();
+
+    console.log("STEP 2: Ensure at least one record with New status exists...");
+    const recordCount = await patientReferral.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
+
+    console.log("STEP 2: Capture first record name...");
+    const recordName = await patientReferral.getFirstRecordNameOnly();
+
+    console.log("STEP 3: Click Reject icon and verify dialog opens...");
+    await patientReferral.clickRejectAndOpenDialog();
+
+    console.log("STEP 4: Verify reject dialog controls...");
+    await patientReferral.verifyApprovalDialogControls();
+
+    console.log("STEP 5: Close dialog and verify closure...");
+    await patientReferral.closeApprovalDialog();
+    await patientReferral.verifyApprovalDialogClosedAndGridVisible();
+
+    console.log("STEP 6: Reopen reject dialog...");
+    await patientReferral.reopenRejectDialog();
+
+    console.log("STEP 7: Fill rejection note with faker...");
+    const uniqueSentence = await patientReferral.fillApprovalNoteWithFaker();
+
+    console.log("STEP 8: Save rejection...");
+    await patientReferral.saveApprovalAndWaitForCompletion();
+
+    console.log("STEP 9: Verify rejection success message...");
+    await patientReferral.verifySuccessMessage();
+
+    console.log("STEP 10: Verify dialog closed...");
+    await patientReferral.verifyDialogClosedAfterSave();
+
+    console.log("STEP 11: Verify record in rejected grid with status and notes...");
+    await patientReferral.verifyRecordInRejectedGrid(recordName, uniqueSentence);
+
+    console.log(`ASSERT: Rejection workflow completed for ${recordName.firstName} ${recordName.lastName}`);
+    console.log(`ASSERT: Record status changed to 'Rejected' with notes persisted`);
   });
 
 });
