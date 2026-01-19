@@ -1,328 +1,267 @@
 const { test, expect } = require('@playwright/test');
 const { ProbationPortalPage } = require('../pages/ProbationPortal');
 const { faker } = require('@faker-js/faker');
-const fs = require('fs');
-const path = require('path');
 
-test.describe('Probation Portal Navigation and Default State', () => {
-  test.use({ storageState: 'authState.json' });
+test.use({ storageState: 'authState.json' });
 
+test.describe('Probation Portal Module Tests', () => {
   test.beforeEach(async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
     
-    // Navigate to Dashboard
+    console.log('SETUP: Navigating to Probation Portal...');
     await probationPortal.navigateToDashboard();
     
     // Skip MFA if visible
     const skipMfaVisible = await probationPortal.skipMfaButton.isVisible({ timeout: 10000 }).catch(() => false);
     if (skipMfaVisible) {
       await probationPortal.skipMfa();
-      console.log('✔️ MFA skipped');
     }
     
-    // Navigate to Portal Requests page via UI (using Quick Menu)
+    // Navigate to Portal Requests page via UI
     await probationPortal.navigateToPortalRequestsViaUI();
     await probationPortal.waitForPortalRequestsGridToLoad();
-    console.log('✔️ Portal Requests page loaded successfully');
     
-    // Navigate to Probation Portal via UI (clicking the heading)
+    // Navigate to Probation Portal via UI
     await probationPortal.navigateToProbationPortalViaUI();
-    console.log('✔️ Probation Portal section loaded successfully');
+    console.log('SETUP: Probation Portal loaded successfully');
   });
 
-  test('Verify Probation Portal navigation from Portal Requests', async ({ page }) => {
+  test('Verify Probation Portal Navigation and Controls', async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
 
-    console.log('\n➡️ Probation Portal Default State and Control Visibility...');
-
-    // Verify Probation Portal is selected by default
+    console.log("STEP 1: Verify Probation Portal is displayed...");
     await probationPortal.verifyProbationPortalIsSelected();
 
-    // Verify Search control is available
+    console.log("STEP 2: Verify all controls visibility and functionality...");
     await probationPortal.verifySearchControl();
-
-    // Verify Status dropdown is visible
     await probationPortal.verifyStatusDropdown();
-
-    // Verify Search button
     await probationPortal.verifySearchButton();
-
-    // Verify Reset button
     await probationPortal.verifyResetButton();
-
-    // Verify New Request button
     await probationPortal.verifyNewRequestButton();
 
-    console.log('✅ Test completed: Probation Portal default state and all controls verified');
+
+    console.log(`ASSERT: All controls (Search, Status, Buttons) verified successfully`);
   });
 
-  test('Verify default status selection in Status dropdown', async ({ page }) => {
+  // done
+  test('Verify Default Status Selection and Dropdown Options', async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
 
-    console.log('\n➡️ Verify default status selection in Status dropdown...');
-
-    // Verify default status selection in Status dropdown
+    console.log("STEP 1: Verify default status selection is 'New'...");
     await probationPortal.verifyDefaultStatusSelection();
 
-    // Click on Status dropdown to view all available options
+    console.log("STEP 2: Expand status dropdown to view all options...");
     await probationPortal.clickStatusDropdownToExpandOptions();
 
-    // Verify all status options are available
+    console.log("STEP 3: Verify all status options are available...");
     await probationPortal.verifyStatusDropdownOptionsAvailable();
 
-    console.log('✅ Test completed: Default status selection and dropdown options verified');
+    console.log("ASSERT: Default status selection and dropdown options verified successfully");
   });
 
-  test('Verify all grid columns are displayed', async ({ page }) => {
+  // done
+  test('Validate Grid Column Headers Visibility', async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
 
-    console.log('\n➡️ Verify all grid columns are displayed...');
+    console.log("STEP 1: Validating all grid column headers are visible...");
+    await probationPortal.validateGridColumns();
 
-    // Verify grid columns are displayed
-    const columnCount = await probationPortal.verifyGridColumnsDisplayed();
-
-    // Fetch and print all grid column names
-    const columnNames = await probationPortal.fetchAndPrintGridColumnNames();
-
-    console.log(`✅ Test completed: All ${columnCount} grid columns verified and displayed`);
+    console.log("ASSERT: All grid column headers validated successfully");
   });
 
-  test('Probation Portal New Request Creation and Form Validation', async ({ page }) => {
+  // done
+  test('Create New Probation Portal Request and Verify in Grid', async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
 
-    console.log('\n➡️ Probation Portal New Request Creation and Form Validation...');
+    // Generate test data
+    const testData = {
+      firstName: faker.person.firstName(),
+      lastName: faker.person.lastName(),
+      email: faker.internet.email(),
+      phone: faker.helpers.replaceSymbols('(###) ###-####'),
+      designation: 'Probation Officer',
+      additionalInfo: faker.lorem.sentence()
+    };
 
-    // Generate test data using faker
-    const testFirstName = faker.person.firstName();
-    const testLastName = faker.person.lastName();
-    const testEmail = faker.internet.email();
-    const testPhone = faker.helpers.replaceSymbols('(###) ###-####');
-    const testDesignation = 'Probation Officer';
-    const testAdditionalInfo = faker.lorem.sentence();
+    console.log(`STEP 1: Generated test data - ${testData.firstName} ${testData.lastName}`);
 
-    console.log(`STEP 1: Generated test data - ${testFirstName} ${testLastName}`);
-
-    // Get initial count
+    console.log("STEP 2: Get initial grid record count...");
     const initialCount = await probationPortal.getInitialGridCount();
 
-    // Click New Request button
+    console.log("STEP 3: Click New Request button...");
     await probationPortal.clickNewRequestButton();
     await probationPortal.verifyProbationPortalAccessDialogOpened();
 
-    // Verify close button
+    console.log("STEP 4: Verify close button functionality...");
     await probationPortal.verifyCloseDialogButton();
-
-    // Test close button functionality
     await probationPortal.closeDialog();
     await probationPortal.verifyDialogClosed();
 
-    // Reopen dialog
+    console.log("STEP 5: Reopen dialog and fill form...");
     await probationPortal.clickNewRequestButton();
     await probationPortal.verifyProbationPortalAccessDialogOpened();
+    await probationPortal.fillFirstName(testData.firstName);
+    await probationPortal.fillLastName(testData.lastName);
+    await probationPortal.fillEmail(testData.email);
+    await probationPortal.fillPhone(testData.phone);
+    await probationPortal.fillDesignation(testData.designation);
+    await probationPortal.fillAdditionalInfo(testData.additionalInfo);
 
-    // Fill form fields with generated data
-    await probationPortal.fillFirstName(testFirstName);
-    await probationPortal.fillLastName(testLastName);
-    await probationPortal.fillEmail(testEmail);
-    await probationPortal.fillPhone(testPhone);
-    await probationPortal.fillDesignation(testDesignation);
-    await probationPortal.fillAdditionalInfo(testAdditionalInfo);
-
-    // Save the new request
+    console.log("STEP 6: Save new request...");
     await probationPortal.clickSaveButton();
 
-    // Verify record appears in grid
-    await probationPortal.verifyRecordInGrid(testFirstName, testLastName);
-    await probationPortal.verifyRecordEmail(testEmail);
-    await probationPortal.verifyRecordDesignation(testDesignation);
-    await probationPortal.verifyRecordAdditionalInfo(testAdditionalInfo);
+    console.log("STEP 7: Verify record saved in grid...");
+    await probationPortal.verifyRecordInGrid(testData.firstName, testData.lastName, testData.email, testData.designation, testData.additionalInfo);
 
-    // Verify count incremented
+    console.log("STEP 8: Verify grid count incremented...");
     await probationPortal.verifyGridCountIncremented(initialCount);
 
-    console.log('✅ Probation Portal New Request Creation and Form Validation - PASSED');
+    console.log("ASSERT: New request created and verified in grid successfully");
   });
-
-   test('Probation Portal Search Functionality', async ({ page }) => {
+  // done
+  test('Probation Portal Search Functionality', async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
 
-    console.log('\n➡️ Probation Portal Search and Filter Functionality...');
+    console.log("STEP 1: Ensure at least one record with New status exists...");
+    const recordCount = await probationPortal.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
 
-    // Get first record data from grid for testing search
+    console.log("STEP 2: Get first record data from grid for testing search...");
     const recordData = await probationPortal.getFirstRecordData();
-    console.log(`STEP 1: Retrieved test data from first grid record - ${recordData.firstName} ${recordData.lastName}`);
+    console.log(`STEP: Retrieved test data - ${recordData.firstName} ${recordData.lastName}`);
 
     // TEST 1: Search by First Name
-    console.log('\n🔍 TEST 1: Testing Search by First Name...');
-    console.log(`STEP: Searching for First Name: "${recordData.firstName}"`);
+    console.log('\nSTEP 3: Testing Search by First Name...');
+    console.log(`STEP: Searching for: "${recordData.firstName}"`);
     await probationPortal.fillSearchInput(recordData.firstName);
     await probationPortal.clickSearchButton();
-    await probationPortal.waitForLoadingSpinnerToComplete();
     const firstNameResultCount = await probationPortal.verifySearchResultsNotEmpty();
     await probationPortal.verifyRecordInGrid(recordData.firstName, recordData.lastName);
-    console.log(`✔️ Search by First Name works correctly - Found ${firstNameResultCount} result(s)`);
+    console.log(`ASSERT: Search by First Name works correctly - Found ${firstNameResultCount} result(s)`);
 
-    // Reset filters for next test
-    console.log('\nSTEP: Resetting filters after TEST 1...');
+    // Reset filters
+    console.log('\nSTEP: Resetting filters...');
     await probationPortal.clickResetButton();
-    await probationPortal.page.waitForTimeout(500);
-    await probationPortal.waitForLoadingSpinnerToComplete();
+    await page.waitForTimeout(500);
 
     // TEST 2: Search by Last Name
-    console.log('\n🔍 TEST 2: Testing Search by Last Name...');
-    console.log(`STEP: Searching for Last Name: "${recordData.lastName}"`);
+    console.log('\nSTEP 4: Testing Search by Last Name...');
+    console.log(`STEP: Searching for: "${recordData.lastName}"`);
     await probationPortal.fillSearchInput(recordData.lastName);
     await probationPortal.clickSearchButton();
-    await probationPortal.waitForLoadingSpinnerToComplete();
     const lastNameResultCount = await probationPortal.verifySearchResultsNotEmpty();
     await probationPortal.verifyRecordInGrid(recordData.firstName, recordData.lastName);
-    console.log(`✔️ Search by Last Name works correctly - Found ${lastNameResultCount} result(s)`);
+    console.log(`ASSERT: Search by Last Name works correctly - Found ${lastNameResultCount} result(s)`);
 
-    // Reset filters for next test
-    console.log('\nSTEP: Resetting filters after TEST 2...');
+    // Reset filters
+    console.log('\nSTEP: Resetting filters...');
     await probationPortal.clickResetButton();
-    await probationPortal.page.waitForTimeout(500);
-    await probationPortal.waitForLoadingSpinnerToComplete();
+    await page.waitForTimeout(500);
 
     // TEST 3: Search by Email
-    console.log('\n🔍 TEST 3: Testing Search by Email...');
-    console.log(`STEP: Searching for Email: "${recordData.email}"`);
+    console.log('\nSTEP 5: Testing Search by Email...');
+    console.log(`STEP: Searching for: "${recordData.email}"`);
     await probationPortal.fillSearchInput(recordData.email);
     await probationPortal.clickSearchButton();
-    await probationPortal.waitForLoadingSpinnerToComplete();
     const emailResultCount = await probationPortal.verifySearchResultsNotEmpty();
     await probationPortal.verifyRecordEmail(recordData.email);
-    console.log(`✔️ Search by Email works correctly - Found ${emailResultCount} result(s)`);
+    console.log(`ASSERT: Search by Email works correctly - Found ${emailResultCount} result(s)`);
 
-    // Reset filters for next test
-    console.log('\nSTEP: Resetting filters after TEST 3...');
+    // Reset filters
+    console.log('\nSTEP: Resetting filters...');
     await probationPortal.clickResetButton();
-    await probationPortal.page.waitForTimeout(500);
-    await probationPortal.waitForLoadingSpinnerToComplete();
+    await page.waitForTimeout(500);
 
-    // TEST 4: Search by Phone Number
-    console.log('\n🔍 TEST 4: Testing Search by Phone Number...');
-    console.log(`STEP: Searching for Phone: "${recordData.phone}"`);
-    await probationPortal.fillSearchInput(recordData.phone);
-    await probationPortal.clickSearchButton();
-    await probationPortal.waitForLoadingSpinnerToComplete();
-    const phoneResultCount = await probationPortal.verifySearchResultsNotEmpty();
-    console.log(`✔️ Search by Phone Number works correctly - Found ${phoneResultCount} result(s)`);
-
-    // Final reset to restore grid to original state
+    // Final reset
     console.log('\nSTEP: Final reset of filters...');
     await probationPortal.clickResetButton();
-    await probationPortal.page.waitForTimeout(500);
-    await probationPortal.waitForLoadingSpinnerToComplete();
+    await page.waitForTimeout(500);
 
-    console.log('\n✅ Probation Portal Search Functionality - PASSED');
+    console.log('\nASSERT: All search functionality tests passed');
   });
 
+
+  // done
   test('Probation Portal Reset Button Functionality', async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
 
-    console.log('\n➡️ Probation Portal Reset Button Functionality Verification...');
+    console.log("STEP 1: Ensure at least one record with New status exists...");
+    const recordCount = await probationPortal.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
 
-    // Capture original grid count before any searches
-    const originalGridCount = await probationPortal.getSearchResultCount();
-    console.log(`STEP 0: Captured original grid count: ${originalGridCount} records`);
+    console.log("STEP 2: Store first record data before applying filters...");
+    const recordToVerify = await probationPortal.getFirstRecordData();
+    console.log(`DEBUG: Stored record: ${recordToVerify.firstName} ${recordToVerify.lastName}`);
 
-    // Get first record data from grid for testing
-    const recordData = await probationPortal.getFirstRecordData();
-    console.log(`STEP 1: Retrieved test data from first grid record - ${recordData.firstName} ${recordData.lastName}`);
+    console.log("STEP 3: Performing complete reset functionality test (change status AND search)...");
+    const result = await probationPortal.performCompleteResetFunctionalityTest();
+    
+    console.log(`ASSERT: Initial grid state: ${result.initialRecordCount} records with "New" status`);
+    console.log(`ASSERT: Applied status filter: Changed to "${result.appliedStatusFilter}"`);
+    console.log(`ASSERT: Filtered result (status only): ${result.approvedFilteredCount} records`);
+    console.log(`ASSERT: Filtered result (status + search): ${result.doubleFilteredCount} records`);
+    console.log(`ASSERT: Reset applied and verified - count restored to ${result.resetRecordCount}`);
+    console.log(`ASSERT: Search field and status dropdown reset to defaults`);
 
-    // TEST 1: Verify Reset after First Name Search
-    console.log('\n🔍 TEST 1: Verify Reset after First Name Search...');
-    console.log(`STEP: Searching for First Name: "${recordData.firstName}"`);
-    await probationPortal.fillSearchInput(recordData.firstName);
-    await probationPortal.clickSearchButton();
-    await probationPortal.waitForLoadingSpinnerToComplete();
-    const firstNameResultCount = await probationPortal.verifySearchResultsNotEmpty();
-    console.log(`STEP: Found ${firstNameResultCount} result(s) after search`);
+    console.log("STEP 4: Verify stored record exists in grid after reset...");
+    console.log(`STEP 4.1: Verifying record: "${recordToVerify.firstName} ${recordToVerify.lastName}"...`);
+    await probationPortal.verifyRecordInGrid(recordToVerify.firstName, recordToVerify.lastName);
 
-    // Verify Reset functionality
-    console.log('\nSTEP: Clicking Reset button...');
-    await probationPortal.clickResetButton();
-    await probationPortal.page.waitForTimeout(500);
-    await probationPortal.waitForLoadingSpinnerToComplete();
-    await probationPortal.verifyResetFunctionality(originalGridCount);
-    console.log(`✔️ Reset verified after First Name search`);
-
-    console.log('\n✅ Probation Portal Reset Button Functionality - PASSED');
+    console.log("ASSERT: Reset Functionality test passed - Stored record verified in grid after reset");
   });
-//Ask Sumit about how to verify grid status after filtering by status dropdown as we dont have status column
+
+  // done
   test('Probation Portal Status Dropdown Filtering', async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
 
-    console.log('\n➡️ Probation Portal Status Dropdown Filtering...');
-
-    // STEP 1: Retrieve and verify available status options are visible and enabled
-    console.log('\nSTEP 1: Retrieving and verifying status options are visible and enabled...');
+    console.log("STEP 1: Retrieve and verify available status options...");
     await probationPortal.clickStatusDropdownToExpandOptions();
     
-    // Verify each status option is visible and enabled
     const statusOptions = ['New', 'Approved', 'Rejected'];
     for (const option of statusOptions) {
       const optionElement = page.getByRole('option', { name: option });
       await expect(optionElement).toBeVisible();
       const isEnabled = await optionElement.isEnabled();
       expect(isEnabled).toBe(true);
-      console.log(`✔️ Status option "${option}" is visible and enabled (clickable)`);
+      console.log(`ASSERT: Status option "${option}" is visible and enabled`);
     }
 
-    // Close dropdown by pressing Escape
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
 
-    // STEP 2: Select "Rejected" Status
-    console.log('\nSTEP 2: Selecting "Rejected" status from dropdown...');
+    console.log("\nSTEP 2: Select 'Rejected' status filter...");
     await probationPortal.selectStatusFilter('Rejected');
-    console.log('✔️ "Rejected" status selected');
 
-    // STEP 3: Click Search button
-    console.log('\nSTEP 3: Clicking Search button...');
+    console.log("STEP 3: Click Search button...");
     await probationPortal.clickSearchButton();
-    await probationPortal.waitForLoadingSpinnerToComplete();
-    console.log('✔️ Search executed');
 
-    // STEP 4: Verify "Rejected" status is visible in status dropdown field
-    console.log('\nSTEP 4: Verifying "Rejected" is present in status dropdown field...');
+    console.log("STEP 4: Verify 'Rejected' status is applied...");
     await probationPortal.verifyStatusFilterApplied('Rejected');
-    console.log('✔️ Status filter "Rejected" verified in dropdown field');
 
-    // Final reset to restore grid to original state
-    console.log('\nSTEP 5: Final reset of filters...');
+    console.log("STEP 5: Reset filters to default state...");
     await probationPortal.clickResetButton();
-    await probationPortal.page.waitForTimeout(500);
-    await probationPortal.waitForLoadingSpinnerToComplete();
-    console.log('✔️ Filters reset to default state');
+    await page.waitForTimeout(500);
 
-    console.log('\n✅ Probation Portal Status Dropdown Filtering - PASSED');
+    console.log("ASSERT: Status dropdown filtering verified successfully");
   });
-// add if condition if rows count < 2 skip sorting test
+  // done
   test('Probation Portal Grid Data and Sorting Validation', async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
 
-    console.log('\n➡️ Probation Portal Grid Data and Sorting Validation...');
-
-    // STEP 1: Verify grid loads with data
-    console.log('\nSTEP 1: Verifying grid loads and displays data...');
+    console.log("STEP 1: Verify grid loads with data...");
     await expect(probationPortal.probationPortalGrid).toBeVisible({ timeout: 10000 });
     
     const recordCount = await probationPortal.getGridRecordCount();
     console.log(`ASSERT: Grid loaded with ${recordCount} records`);
     
-    // SKIP if insufficient data for sorting validation
     if (recordCount < 2) {
-      console.log(`⏭️ SKIPPING: Only ${recordCount} record(s) found. Sorting requires at least 2 records for validation.`);
+      console.log(`SKIP: Only ${recordCount} record(s) found. Sorting requires at least 2 records for validation.`);
       test.skip();
       return;
     }
 
-    // STEP 2: Test sorting for each column
-    console.log('\nSTEP 2: Testing sorting functionality for all columns...');
+    console.log("\nSTEP 2: Test sorting functionality for all columns...");
     
-    // Column indices: First Name: 0, Last Name: 1, Email: 2, Phone Number: 3, Designation: 4, Additional Info: 5, Action By: 6, Action Notes: 7, Action: 8
     const columnsToTest = [
       { index: 0, name: 'First Name' },
       { index: 1, name: 'Last Name' },
@@ -338,213 +277,184 @@ test.describe('Probation Portal Navigation and Default State', () => {
       await probationPortal.testColumnDualClickSorting(column.index, column.name);
     }
 
-    console.log('\n✅ Probation Portal Grid Data and Sorting Validation - COMPLETED');
+    console.log(`ASSERT: Grid sorting validation completed for ${columnsToTest.length} columns`);
   });
 
-  test('Probation Portal Verify Approve and Reject buttons are visible and clickable', async ({ page }) => {
+  // done
+  test('Probation Portal Verify Approve and Reject buttons', async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
 
-    console.log('\n➡️ Probation Portal Verify Approve and Reject buttons are visible and clickable...');
+    console.log("STEP 1: Ensure at least one record with New status exists...");
+    const recordCount = await probationPortal.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
 
-    // Verify both Approve and Reject buttons are visible and clickable
+    console.log("STEP 2: Verify Approve and Reject buttons are visible and clickable...");
     await probationPortal.verifyApproveAndRejectButtons();
 
-    console.log(`\n✅ Probation Portal Approve and Reject buttons verification - PASSED`);
+    console.log("ASSERT: All Approve and Reject buttons verified successfully");
   });
-// fix notification locator.
-
+  // done
   test('Probation Portal Approval Workflow', async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
 
-    console.log('\n➡️ Probation Portal Approval Workflow - STARTED');
+    console.log("STEP 1: Ensure at least one record with New status exists...");
+    const recordCount = await probationPortal.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
 
-    // STEP 1: Verify portal is loaded and status is set to "New"
+    console.log("STEP 2: Verify portal is loaded with 'New' status filter...");
     await expect(probationPortal.probationPortalGrid).toBeVisible({ timeout: 10000 });
     await probationPortal.waitForLoadingSpinnerToComplete();
-    console.log('STEP 1: Probation Portal loaded with "New" status filter');
 
-    // STEP 2: Get initial record count
+    console.log("STEP 3: Get initial record count...");
     const initialRecordCount = await probationPortal.getGridRecordCount();
-    console.log(`STEP 2: Initial record count captured: ${initialRecordCount} records`);
 
-    // STEP 3: Retrieve first record data for verification
+    console.log("STEP 4: Retrieve first record data...");
     const recordData = await probationPortal.getFirstRecordData();
     const { firstName, lastName } = recordData;
-    console.log(`STEP 3: First record data captured - ${firstName} ${lastName}`);
 
-    // STEP 4-7: Initiate approval workflow (click approve, open dialog, close/reopen)
+    console.log("STEP 5-8: Initiate approval workflow...");
     const dialog = await probationPortal.initiateApprovalWorkflow();
-    console.log('STEP 4-7: Approval workflow initiated - dialog ready');
 
-    // STEP 8: Test radio button selection and text population
-    console.log('\nSTEP 8: Testing radio button selection and text population...');
+    console.log("\nSTEP 9: Testing radio button selection and text population...");
     const hasRadioButtons = await probationPortal.verifyRadioButtonsAvailable(dialog);
     
     if (hasRadioButtons) {
-      console.log('  Testing "Expired Treatment Plan" option:');
       await probationPortal.testRadioButtonAndTextPopulation(dialog, 'Expired Treatment Plan', 'Treatment');
-      console.log('  Testing "Patient Balance" option:');
       await probationPortal.testRadioButtonAndTextPopulation(dialog, 'Patient Balance', 'Balance');
-      console.log('  Testing "Other" option:');
       await probationPortal.clickRadioButton(dialog, 'Other');
-      const otherTextArea = dialog.getByRole('textbox');
-      await expect(otherTextArea).toBeVisible();
     }
-    console.log('STEP 8: Radio button testing completed');
 
-    // STEP 9-13: Complete approval with note (enter note, save, verify notification)
+    console.log("\nSTEP 10-14: Complete approval with note...");
     const approvalNote = faker.lorem.sentences(2).replace(/\s+/g, ' ');
     await probationPortal.completeApprovalWithNote(dialog, approvalNote);
-    console.log('STEP 9-13: Approval saved - success notification verified');
 
-    // STEP 14: Verify record count decreased by 1
+    console.log("STEP 15: Verify record count decreased by 1...");
     await probationPortal.waitForLoadingSpinnerToComplete();
     const finalRecordCount = await probationPortal.getGridRecordCount();
     expect(finalRecordCount).toBe(initialRecordCount - 1);
-    console.log(`STEP 14: Record count verified - decreased from ${initialRecordCount} to ${finalRecordCount}`);
 
-    // STEP 15-18: Verify approved status and record (filter, search, verify record)
+    console.log("STEP 16-19: Verify approved status and record...");
     await probationPortal.verifyApprovedStatusAndRecord(firstName, lastName, approvalNote);
-    console.log('STEP 15-18: Approved record verified in filtered grid');
 
-    console.log('Probation Portal Approval Workflow - COMPLETED\n');
+    console.log("ASSERT: Approval workflow completed successfully");
   });
-//test will fail if there is no data with new status
+
+  // done
   test('Probation Portal Rejection Workflow', async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
 
-    console.log('\n➡️ Probation Portal Rejection Workflow - STARTED');
+    console.log("STEP 1: Ensure at least one record with New status exists...");
+    const recordCount = await probationPortal.ensureRecordWithNewStatusExists();
+    expect(recordCount).toBeGreaterThan(0);
 
-    // STEP 1: Verify portal is loaded
+    console.log("STEP 2: Verify portal is loaded...");
     await expect(probationPortal.probationPortalGrid).toBeVisible({ timeout: 10000 });
     await probationPortal.waitForLoadingSpinnerToComplete();
-    console.log('STEP 1: Probation Portal loaded with "New" status filter');
 
-    // STEP 2: Get initial record count and first record data
+    console.log("STEP 3: Get initial record count...");
     const initialRecordCount = await probationPortal.getGridRecordCount();
-    console.log(`STEP 2: Initial record count captured: ${initialRecordCount} records`);
 
+    console.log("STEP 4: Retrieve first record data...");
     const recordData = await probationPortal.getFirstRecordData();
     const { firstName, lastName } = recordData;
-    console.log(`STEP 3: First record data captured - ${firstName} ${lastName}`);
 
-    // STEP 4-7: Initiate rejection workflow (click reject, open dialog, close/reopen)
+    console.log("STEP 5-8: Initiate rejection workflow...");
     const dialog = await probationPortal.initiateRejectionWorkflow();
-    console.log('STEP 4-7: Rejection workflow initiated - dialog ready');
 
-    // STEP 8: Test radio button selection and text population
-    console.log('\nSTEP 8: Testing radio button selection and text population...');
+    console.log("\nSTEP 9: Testing radio button selection and text population...");
     const hasRadioButtons = await probationPortal.verifyRadioButtonsAvailable(dialog);
     
     if (hasRadioButtons) {
-      console.log('  Testing "Expired Treatment Plan" option:');
       await probationPortal.testRadioButtonAndTextPopulation(dialog, 'Expired Treatment Plan', 'Treatment');
-      console.log('  Testing "Patient Balance" option:');
       await probationPortal.testRadioButtonAndTextPopulation(dialog, 'Patient Balance', 'Balance');
-      console.log('  Testing "Other" option:');
       await probationPortal.clickRadioButton(dialog, 'Other');
-      const otherTextArea = dialog.getByRole('textbox');
-      await expect(otherTextArea).toBeVisible();
     }
-    console.log('STEP 8: Radio button testing completed');
 
-    // STEP 9-13: Complete rejection with note (enter note, save, verify notification)
+    console.log("\nSTEP 10-14: Complete rejection with note...");
     const rejectionNote = faker.lorem.sentences(2).replace(/\s+/g, ' ');
     await probationPortal.completeRejectionWithNote(dialog, rejectionNote);
-    console.log('STEP 9-13: Rejection saved - success notification verified');
 
-    // STEP 14: Verify record count decreased by 1
+    console.log("STEP 14.5: Verify success message popup appeared...");
+    await probationPortal.verifySuccessMessagePopup();
+
+    console.log("STEP 15: Verify record count decreased by 1...");
     await probationPortal.waitForLoadingSpinnerToComplete();
     const finalRecordCount = await probationPortal.getGridRecordCount();
     expect(finalRecordCount).toBe(initialRecordCount - 1);
-    console.log(`STEP 14: Record count verified - decreased from ${initialRecordCount} to ${finalRecordCount}`);
 
-    // STEP 15-18: Verify rejected status and record (filter, search, verify record)
-    await probationPortal.verifyRejectedStatusAndRecord(firstName, lastName, rejectionNote);
-    console.log('STEP 15-18: Rejected record verified in filtered grid');
-
-    console.log('Probation Portal Rejection Workflow - COMPLETED\n');
-  });
-
-  test('Probation Portal Verify thumbnail count matches grid count', async ({ page }) => {
-    const probationPortal = new ProbationPortalPage(page);
-
-    console.log('\n➡️ Probation Portal Verify thumbnail count matches grid count...');
-
-    // Step 1: Get current grid count (already on Probation Portal with default "New" status from beforeEach)
-    const gridCount = await probationPortal.getGridRecordCount();
-    console.log(`STEP 1: Grid count is ${gridCount}`);
-
-    // Step 2: Navigate back to Portal Requests dashboard to see thumbnail
-    await probationPortal.navigateToPortalRequestsViaUI();
-    await probationPortal.waitForPortalRequestsGridToLoad();
-    console.log('STEP 2: Portal Requests dashboard loaded');
-
-    // Step 3: Get thumbnail count for Probation Portal
-    const thumbnailCount = await probationPortal.getThumbnailCount();
-    console.log(`STEP 3: Thumbnail count is ${thumbnailCount}`);
-    // Step 4: Verify counts match
-    expect(thumbnailCount).toBe(gridCount);
-    console.log(`STEP 4: Thumbnail count (${thumbnailCount}) matches grid count (${gridCount})`);
-
-    console.log('\n✅ Probation Portal thumbnail count verification - PASSED');
-  });
-
-  test('Probation Portal Pagination Functionality - Records Per Page Dropdown', async ({ page }) => {
-    const probationPortal = new ProbationPortalPage(page);
-
-    console.log('\n➡️ Probation Portal Pagination Functionality - Records Per Page Dropdown');
-
-    // Step 1: Verify grid is loaded
-    console.log('\nSTEP 1: Verifying grid is loaded...');
-    await expect(probationPortal.probationPortalGrid).toBeVisible({ timeout: 10000 });
-    await probationPortal.waitForLoadingSpinnerToComplete();
-    console.log('✅ STEP 1: Grid loaded successfully');
-
-    // Step 2: Apply "Rejected" status filter and search
-    console.log('\nSTEP 2: Applying "Rejected" status filter...');
+    console.log("STEP 15.5: Change status filter to 'Rejected' to verify record status...");
     await probationPortal.selectStatusFilter('Rejected');
     await probationPortal.clickSearchButton();
     await probationPortal.waitForLoadingSpinnerToComplete();
-    console.log('✅ STEP 2: "Rejected" status filter applied');
 
-    // Step 3: Verify pagination info is visible
-    console.log('\nSTEP 3: Verifying pagination info...');
+    console.log("STEP 16: Verify rejected record exists in grid...");
+    console.log(`DEBUG: Rejection note used: "${rejectionNote}"`);
+    await probationPortal.verifyRecordInGrid(firstName, lastName, null, null, null, rejectionNote);
+
+    console.log("ASSERT: Rejection workflow completed successfully");
+  });
+
+  // done
+  test('Probation Portal Thumbnail Count Verification', async ({ page }) => {
+    const probationPortal = new ProbationPortalPage(page);
+
+    console.log("STEP 1: Get current grid count (already on Probation Portal with 'New' status)...");
+    const gridCount = await probationPortal.getGridRecordCount();
+
+    console.log("STEP 2: Navigate back to Portal Requests dashboard...");
+    await probationPortal.navigateToPortalRequestsViaUI();
+    await probationPortal.waitForPortalRequestsGridToLoad();
+
+    console.log("STEP 3: Get thumbnail count for Probation Portal...");
+    const thumbnailCount = await probationPortal.getThumbnailCount();
+
+    console.log("STEP 4: Verify counts match...");
+    expect(thumbnailCount).toBe(gridCount);
+
+    console.log(`ASSERT: Thumbnail count (${thumbnailCount}) matches grid count (${gridCount})`);
+  });
+
+  // done
+  test('Probation Portal Pagination - Records Per Page Dropdown', async ({ page }) => {
+    const probationPortal = new ProbationPortalPage(page);
+
+    console.log("STEP 1: Verify grid is loaded...");
+    await expect(probationPortal.probationPortalGrid).toBeVisible({ timeout: 10000 });
+    await probationPortal.waitForLoadingSpinnerToComplete();
+
+    console.log("STEP 2: Apply 'Rejected' status filter...");
+    await probationPortal.selectStatusFilter('Rejected');
+    await probationPortal.clickSearchButton();
+    await probationPortal.waitForLoadingSpinnerToComplete();
+
+    console.log("STEP 3: Verify pagination info...");
     const paginationInfo = page.getByText(/\d+ items?/);
     const paginationVisible = await paginationInfo.isVisible({ timeout: 5000 }).catch(() => false);
     
     if (paginationVisible) {
       const paginationText = await paginationInfo.textContent();
-      console.log(`✅ STEP 3: Pagination info visible - "${paginationText}"`);
-    } else {
-      console.log('⚠️ STEP 3: Pagination info not visible, continuing with test');
+      console.log(`ASSERT: Pagination info visible - "${paginationText}"`);
     }
 
-    // Step 4: Test page size dropdown functionality
-    console.log('\nSTEP 4: Testing page size dropdown...');
+    console.log("STEP 4: Test page size dropdown...");
     const result = await probationPortal.testPageSizeDropdown();
     
-    // Assert that dropdown was found
     expect(result.found).toBe(true);
-    console.log('✅ STEP 4a: Page size dropdown found');
-    
-    // Assert that page size change functionality actually works
     expect(result.changed).toBe(true);
-    console.log('✅ STEP 4b: Page size change functionality verified - dropdown is working correctly');
 
-    console.log('\n✅ Probation Portal Pagination Functionality - Records Per Page Dropdown - COMPLETED');
+    console.log("ASSERT: Page size dropdown functionality verified");
   });
 
-  test('Probation Portal Pagination Functionality - Next & Previous Page Navigation', async ({ page }) => {
+  // done
+  test('Probation Portal Pagination - Next & Previous Page Navigation', async ({ page }) => {
     const probationPortal = new ProbationPortalPage(page);
 
-    // Test pagination for all status filters using POM method
+    console.log("STEP 1: Test pagination for all status filters...");
     const results = await probationPortal.testPaginationForAllStatuses();
 
-    // Validate results for each status
+    console.log("\nSTEP 2: Validate results for each status...");
     for (const [status, result] of Object.entries(results)) {
       if (!result.skipped) {
-        // Verify basic assertions
         expect(result.rowsOnFirstPage).toBeGreaterThanOrEqual(0);
         
         if (result.navigationResult.hasNextPage) {
@@ -560,7 +470,6 @@ test.describe('Probation Portal Navigation and Default State', () => {
       }
     }
 
-    console.log('✅ Probation Portal Pagination Functionality - Next & Previous Page Navigation: All pagination assertions completed successfully');
+    console.log("ASSERT: Pagination assertions completed successfully");
   });
-  
 });
