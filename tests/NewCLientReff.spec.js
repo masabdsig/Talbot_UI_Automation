@@ -4,7 +4,7 @@ const { BasicTables } = require('../pages/basictables');
 
 test.use({ storageState: 'authState.json' });
 
-test.describe('New Client Referrals To Be Called (Refactored)', () => {
+test.describe('New Client Referrals To Be Called', () => {
   let newClient;
 
   test.beforeEach(async ({ page }) => {
